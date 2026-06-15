@@ -232,19 +232,24 @@ model HistoriqueSalaire {
 // ─── ÉVALUATIONS DE PERFORMANCE ────────────────────────────────────────────
 
 model Evaluation {
-  id          String   @id @default(cuid())
-  employeId   String
-  periode     String
-  dateEval    DateTime
-  evaluateur  String
-  scoreGlobal Float
-  commentaire String?
-  statut      String   @default("BROUILLON")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  employeId       String
+  typeEvaluation  String   @default("ANNUELLE") // ANNUELLE | SEMESTRIELLE | TRIMESTRIELLE | PERIODE_ESSAI | PONCTUELLE
+  periode         String
+  dateEval        DateTime
+  evaluateur      String
+  scoreGlobal     Float
+  noteAutoEmploye Float?   // score auto-évaluation soumis par l'employé
+  commentaire     String?
+  recommandation  String?  // PROMOTION | AUGMENTATION | FORMATION | MAINTIEN | VIGILANCE
+  statut          String   @default("BROUILLON") // BROUILLON | FINALISE | PUBLIE
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  employe Employe          @relation(fields: [employeId], references: [id], onDelete: Cascade)
-  notes   NoteEvaluation[]
+  employe   Employe               @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  notes     NoteEvaluation[]
+  objectifs ObjectifEvaluation[]
+  actions   ActionDeveloppement[]
 }
 
 model NoteEvaluation {
@@ -253,6 +258,32 @@ model NoteEvaluation {
   critere      String
   note         Int
   commentaire  String?
+  poids        Float   @default(1.0) // pondération du critère
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+}
+
+model ObjectifEvaluation {
+  id           String   @id @default(cuid())
+  evaluationId String
+  titre        String
+  description  String?
+  resultat     String?  // commentaire sur le résultat obtenu
+  atteint      String   @default("EN_COURS") // ATTEINT | PARTIEL | NON_ATTEINT | EN_COURS
+  createdAt    DateTime @default(now())
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+}
+
+model ActionDeveloppement {
+  id           String    @id @default(cuid())
+  evaluationId String
+  titre        String
+  type         String    @default("FORMATION") // FORMATION | COACHING | PROJET | RESPONSABILITE | AUTRE
+  description  String?
+  echeance     DateTime?
+  statut       String    @default("PLANIFIE") // PLANIFIE | EN_COURS | REALISE | ANNULE
+  createdAt    DateTime  @default(now())
 
   evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
 }
