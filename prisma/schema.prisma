@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── UTILISATEURS ──────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("RH") // RH | RESPONSABLE | ADMIN | EMPLOYE
+  employeId    String?  @unique          // renseigné uniquement pour rôle EMPLOYE
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employe          Employe?               @relation(fields: [employeId], references: [id], onDelete: SetNull)
+  demandesInitiees DossierDisciplinaire[] @relation("DossierInitiateur")
+  notifications    Notification[]
+  documentsUploades Document[]            @relation("DocumentUpload")
+}
+
+// ─── EMPLOYÉS ──────────────────────────────────────────────────────────────
+
+model Employe {
+  id               String    @id @default(cuid())
+  matricule        String    @unique
+  prenom           String
+  nom              String
+  email            String?
+  telephone        String?
+  dateNaissance    DateTime?
+  lieuNaissance    String?
+  adresse          String?
+  nationalite      String?
+  numeroCni        String?
+  poste            String
+  departement      String?
+  typeContrat      String
+  dateEmbauche     DateTime
+  dateFinContrat   DateTime?
+  periodeEssai     Boolean   @default(false)
+  dateDebutEssai   DateTime?
+  dateFinEssai     DateTime?
+  salaireBase           Float
+  statut                String    @default("ACTIF")
+  photoUrl              String?
+  notes                 String?
+  soldeCongesAnnuels    Int       @default(30)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  conges                 Conge[]
+  dossiersDisciplinaires DossierDisciplinaire[]
+  historiqueSalaires     HistoriqueSalaire[]
+  documents              Document[]
+  evaluations            Evaluation[]
+  presences              Presence[]
+  affectationsShift      AffectationShift[]
+  utilisateur            User?
+}
+
+// ─── CONGÉS ────────────────────────────────────────────────────────────────
+
+model Conge {
+  id          String   @id @default(cuid())
+  employeId   String
+  type        String
+  dateDebut   DateTime
+  dateFin     DateTime
+  nbJours     Int
+  motif       String?
+  statut      String   @default("EN_ATTENTE")
+  commentaire String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+}
+
+// ─── MODULE DISCIPLINAIRE ──────────────────────────────────────────────────
+//
+// Workflow :
+//   INITIE           → Responsable a soumis la demande
+//   EN_ATTENTE_DOC   → RH doit générer et uploader le document
+//   DOCUMENT_PRET    → RH a uploadé le document, responsable peut télécharger
+//   ENVOYE_EMPLOYE   → Responsable a remis le document à l'employé
+//   EN_ATTENTE_REP   → Attente de la réponse de l'employé (délai en cours)
+//   REPONSE_RECUE    → Responsable a uploadé la réponse scannée
+//   REPONSE_EVALUEE  → RH a évalué la réponse (dans / hors délai)
+//   SANCTION_AUTO    → Sanction auto appliquée (hors délai ou sans réponse)
+//   CLOS             → Dossier clôturé
+
+model DossierDisciplinaire {
+  id          String   @id @default(cuid())
+  employeId   String
+  type        String   // DEMANDE_EXPLICATION | AVERTISSEMENT | BLAME | MISE_EN_DEMEURE | MISE_A_PIED | LICENCIEMENT
+  date        DateTime
+  motif       String
+  description String
+  statut      String   @default("INITIE")
+  sanctions   String?
+  suites      String?
+
+  // ── Phase 1 : contexte ────────────────────────────────────────────────────
+  categoriesFaits   String?  // RETARD | ABSENCE | INSUBORDINATION | FAUTE_PRO | COMPORTEMENT | AUTRE
+  niveauGravite     String?  // FAIBLE | MODERE | ELEVE | CRITIQUE
+  temoins           String?  // noms des témoins (texte libre)
+
+  // ── Phase 2 : workflow de base ────────────────────────────────────────────
+  initiePar             String?
+  delaiReponseJours     Int      @default(5)
+  dateEnvoiDocument     DateTime?
+  dateEnvoiEmploye      DateTime?
+  dateReponseAttendue   DateTime?
+  dateReponseReelle     DateTime?
+  statutReponse         String?   // EN_ATTENTE | DANS_DELAI | HORS_DELAI
+  sanctionAutoAppliquee Boolean  @default(false)
+  sanctionAutoRef       String?
+
+  // ── Phase 3 : accusé de réception ─────────────────────────────────────────
+  modeRemise              String?   // EN_MAIN_PROPRE | COURRIER_RECOMMANDE | EMAIL
+  dateRemiseEffective     DateTime?
+  accuseReceptionUrl      String?   // filename dans uploads/
+  refusReception          Boolean   @default(false)
+  refusReceptionNote      String?
+
+  // ── Phase 4 : analyse RH ──────────────────────────────────────────────────
+  appreciationRH           String?
+  decisionFinale           String?   // ACCEPTEE | PARTIELLEMENT_ACCEPTEE | REJETEE
+  sanctionRetenue          String?
+  documentDecisionUrl      String?   // filename dans uploads/
+  dateNotificationDecision DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employe       Employe       @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  initiateur    User?         @relation("DossierInitiateur", fields: [initiePar], references: [id])
+  documents     Document[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  notesInternes NoteInterne[]
+}
+
+// ─── JOURNAL D'AUDIT ───────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  dossierId   String
+  auteurId    String?
+  auteurNom   String?
+  type        String   // CREATION | DOC_RH | TRANSMISSION | ACCUSE_RECU | REFUS_RECEPTION | REPONSE | ANALYSE | DECISION | CLOTURE | NOTE | SANCTION_AUTO
+  description String
+  metadata    String?  // JSON sérialisé (infos supplémentaires)
+  createdAt   DateTime @default(now())
+
+  dossier DossierDisciplinaire @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+}
+
+// ─── NOTES INTERNES RH ────────────────────────────────────────────────────
+
+model NoteInterne {
+  id        String   @id @default(cuid())
+  dossierId String
+  auteurId  String
+  auteurNom String
+  contenu   String
+  createdAt DateTime @default(now())
+
+  dossier DossierDisciplinaire @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+}
+
+// ─── DOCUMENTS (upload RH + scan réponse) ─────────────────────────────────
+
+model Document {
+  id                     String   @id @default(cuid())
+  nom                    String
+  type                   String   // DOCUMENT_RH | REPONSE_EMPLOYE | AUTRE
+  url                    String   // chemin fichier : uploads/disciplinaire/<filename>
+  taille                 Int?     // octets
+  mimeType               String?
+  uploadeParId           String?  // userId
+  employeId              String?
+  dossierDisciplinaireId String?
+  createdAt              DateTime @default(now())
+
+  uploadePar           User?                 @relation("DocumentUpload", fields: [uploadeParId], references: [id])
+  employe              Employe?              @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  dossierDisciplinaire DossierDisciplinaire? @relation(fields: [dossierDisciplinaireId], references: [id], onDelete: Cascade)
+}
+
+// ─── NOTIFICATIONS IN-APP ─────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // DEMANDE_INITIE | DOCUMENT_PRET | ENVOYE_EMPLOYE | REPONSE_RECUE | SANCTION_AUTO | DELAI_DEPASSE
+  titre     String
+  message   String
+  lu        Boolean  @default(false)
+  dossierId String?
+  createdAt DateTime @default(now())
+
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dossier DossierDisciplinaire? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
+}
+
+// ─── SALAIRES ──────────────────────────────────────────────────────────────
+
+model HistoriqueSalaire {
+  id           String    @id @default(cuid())
+  employeId    String
+  mois         Int
+  annee        Int
+  salaireBase  Float
+  primes       Float     @default(0)
+  retenues     Float     @default(0)
+  netAPayer    Float
+  statut       String    @default("EN_ATTENTE")
+  datePaiement DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+}
+
+// ─── ÉVALUATIONS DE PERFORMANCE ────────────────────────────────────────────
+
+model Evaluation {
+  id          String   @id @default(cuid())
+  employeId   String
+  periode     String
+  dateEval    DateTime
+  evaluateur  String
+  scoreGlobal Float
+  commentaire String?
+  statut      String   @default("BROUILLON")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employe Employe          @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  notes   NoteEvaluation[]
+}
+
+model NoteEvaluation {
+  id           String  @id @default(cuid())
+  evaluationId String
+  critere      String
+  note         Int
+  commentaire  String?
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+}
+
+// ─── SHIFTS & HORAIRES ─────────────────────────────────────────────────────
+
+model Shift {
+  id          String   @id @default(cuid())
+  nom         String
+  heureDebut  String
+  heureFin    String
+  couleur     String   @default("#3b82f6")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  affectations AffectationShift[]
+}
+
+model AffectationShift {
+  id        String   @id @default(cuid())
+  employeId String
+  shiftId   String
+  dateDebut DateTime
+  dateFin   DateTime
+  createdAt DateTime @default(now())
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  shift   Shift   @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+}
+
+model Presence {
+  id                String   @id @default(cuid())
+  employeId         String
+  date              DateTime
+  heureArrivee      String?
+  heureDepart       String?
+  heuresTravaillees Float?
+  minutesRetard     Int      @default(0)
+  statut            String   @default("PRESENT")
+  notes             String?
+  createdAt         DateTime @default(now())
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+}
