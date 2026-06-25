@@ -7,7 +7,9 @@ export async function GET() {
   if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
 
   const shifts = await prisma.shift.findMany({ orderBy: { nom: "asc" } })
-  return NextResponse.json(shifts)
+  return NextResponse.json(shifts, {
+    headers: { "Cache-Control": "private, max-age=300, stale-while-revalidate=600" },
+  })
 }
 
 export async function POST(req: Request) {

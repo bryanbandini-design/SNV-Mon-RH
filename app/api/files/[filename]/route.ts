@@ -16,7 +16,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ filenam
     return NextResponse.json({ message: "Nom de fichier invalide" }, { status: 400 })
   }
 
-  const filepath = join(process.cwd(), "uploads", "disciplinaire", safe)
+  const uploadBase = process.env.UPLOAD_DIR ?? join(process.cwd(), "uploads")
+  const filepath   = join(uploadBase, "disciplinaire", safe)
   if (!existsSync(filepath)) {
     return NextResponse.json({ message: "Fichier introuvable" }, { status: 404 })
   }

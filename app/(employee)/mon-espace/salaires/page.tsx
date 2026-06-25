@@ -1,9 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DollarSign, Download, Loader2 } from "lucide-react"
+import { DollarSign, Printer } from "lucide-react"
 import { formatCurrency, MOIS } from "@/lib/utils"
-import { toast } from "sonner"
 
 type Employe = { prenom: string; nom: string; matricule: string; poste: string; salaireBase: number }
 type Salaire = {
@@ -12,103 +11,9 @@ type Salaire = {
   statut: string; datePaiement: string | null; notes: string | null
 }
 
-async function genererPDF(salaire: Salaire, employe: Employe) {
-  const { jsPDF } = await import("jspdf")
-  const autoTable  = (await import("jspdf-autotable")).default
-
-  const doc  = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const blue = [37, 99, 235] as [number, number, number]
-  const dark = [15, 23, 42]  as [number, number, number]
-  const grey = [100, 116, 139] as [number, number, number]
-
-  // Header bande colorée
-  doc.setFillColor(...blue)
-  doc.rect(0, 0, 210, 40, "F")
-
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(20)
-  doc.setFont("helvetica", "bold")
-  doc.text("BULLETIN DE PAIE", 14, 16)
-
-  doc.setFontSize(11)
-  doc.setFont("helvetica", "normal")
-  doc.text(`${MOIS[salaire.mois - 1]} ${salaire.annee}`, 14, 25)
-
-  doc.setFontSize(9)
-  doc.text(`Matricule : ${employe.matricule}`, 14, 33)
-
-  // Infos employé
-  doc.setTextColor(...dark)
-  doc.setFontSize(13)
-  doc.setFont("helvetica", "bold")
-  doc.text(`${employe.prenom} ${employe.nom}`, 14, 52)
-
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(10)
-  doc.setTextColor(...grey)
-  doc.text(employe.poste, 14, 58)
-
-  // Table détails
-  autoTable(doc, {
-    startY: 68,
-    head: [["Libellé", "Base", "Montant"]],
-    body: [
-      ["Salaire de base",       "",   formatCurrency(salaire.salaireBase)],
-      ["Primes & avantages",    "+",  formatCurrency(salaire.primes)],
-      ["Retenues & charges",    "-",  formatCurrency(salaire.retenues)],
-    ],
-    headStyles:   { fillColor: blue, textColor: 255, fontStyle: "bold", fontSize: 9 },
-    bodyStyles:   { fontSize: 10, textColor: dark },
-    columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 20, halign: "center" }, 2: { halign: "right" } },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 14, right: 14 },
-  })
-
-  const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
-
-  // Net à payer en évidence
-  doc.setFillColor(236, 253, 245)
-  doc.roundedRect(14, afterTable, 182, 18, 3, 3, "F")
-  doc.setTextColor(5, 150, 105)
-  doc.setFontSize(11)
-  doc.setFont("helvetica", "bold")
-  doc.text("NET À PAYER", 20, afterTable + 11)
-  doc.setFontSize(14)
-  doc.text(formatCurrency(salaire.netAPayer), 196, afterTable + 11, { align: "right" })
-
-  // Statut paiement
-  if (salaire.statut === "PAYE" && salaire.datePaiement) {
-    doc.setTextColor(...grey)
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "normal")
-    doc.text(
-      `Payé le ${new Date(salaire.datePaiement).toLocaleDateString("fr-FR")}`,
-      14, afterTable + 30
-    )
-  }
-
-  // Notes
-  if (salaire.notes) {
-    doc.setTextColor(...grey)
-    doc.setFontSize(8)
-    doc.text(`Note : ${salaire.notes}`, 14, afterTable + 38)
-  }
-
-  // Footer
-  doc.setFillColor(248, 250, 252)
-  doc.rect(0, 277, 210, 20, "F")
-  doc.setTextColor(...grey)
-  doc.setFontSize(7)
-  doc.text("Document généré automatiquement — Mon RH", 105, 285, { align: "center" })
-  doc.text(`Émis le ${new Date().toLocaleDateString("fr-FR")}`, 105, 290, { align: "center" })
-
-  doc.save(`bulletin-${MOIS[salaire.mois - 1]}-${salaire.annee}-${employe.nom}.pdf`)
-}
-
 export default function MesSalairesPage() {
   const [employe,  setEmploye]  = useState<Employe | null>(null)
   const [salaires, setSalaires] = useState<Salaire[]>([])
-  const [loadingId, setLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/mon-espace/salaires")
@@ -118,16 +23,13 @@ export default function MesSalairesPage() {
       })
   }, [])
 
-  async function handleDownload(s: Salaire) {
-    if (!employe) return
-    setLoadingId(s.id)
-    try {
-      await genererPDF(s, employe)
-      toast.success("Bulletin téléchargé !")
-    } catch {
-      toast.error("Erreur lors de la génération du PDF")
+  function handleDownload(s: Salaire) {
+    const isCapacitor = !!(window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+    if (isCapacitor) {
+      window.location.href = `/print/bulletin/${s.id}`
+    } else {
+      window.open(`/print/bulletin/${s.id}`, "_blank")
     }
-    setLoadingId(null)
   }
 
   const totalPaye = salaires.filter(s => s.statut === "PAYE").reduce((a, s) => a + s.netAPayer, 0)
@@ -192,14 +94,10 @@ export default function MesSalairesPage() {
                   </div>
                   <button
                     onClick={() => handleDownload(s)}
-                    disabled={loadingId === s.id}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-emerald-300 hover:text-emerald-700 transition-all disabled:opacity-50 flex-shrink-0"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-emerald-300 hover:text-emerald-700 transition-all flex-shrink-0"
                   >
-                    {loadingId === s.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Download className="h-3.5 w-3.5" />
-                    }
-                    PDF
+                    <Printer className="h-3.5 w-3.5" />
+                    Imprimer
                   </button>
                 </div>
               )

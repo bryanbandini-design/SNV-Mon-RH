@@ -6,15 +6,26 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Plus, DollarSign, Loader2, Check, TrendingUp, Clock,
-  Pencil, Trash2, X, Filter,
+  Pencil, Trash2, X, Filter, AlertCircle, FileDown, Printer,
 } from "lucide-react"
 import { formatCurrency, MOIS } from "@/lib/utils"
 import { toast } from "sonner"
+import { calculerSalaire, CAMEROUN, formatFCFA, type DetailsSalaire } from "@/lib/cameroun-salaire"
+
+function downloadCSV(rows: (string | number)[][], filename: string) {
+  const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" })
+  const url  = URL.createObjectURL(blob)
+  const a    = Object.assign(document.createElement("a"), { href: url, download: filename })
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 type Employe = { id: string; prenom: string; nom: string; matricule: string; poste: string; salaireBase: number }
 type Salaire = {
   id: string; mois: number; annee: number; salaireBase: number
   primes: number; retenues: number; netAPayer: number
+  brutImposable: number; cnpsSalarie: number; irpp: number; cac: number; rav: number; cnpsPatronal: number
   statut: string; datePaiement: string | null; notes: string | null
   employe: { id: string; prenom: string; nom: string; matricule: string; poste: string }
 }
@@ -120,6 +131,34 @@ export default function SalairesPage() {
     }
   }
 
+  function openBulletin(s: Salaire) {
+    const isCapacitor = !!(window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+    if (isCapacitor) {
+      window.location.href = `/print/bulletin/${s.id}`
+    } else {
+      window.open(`/print/bulletin/${s.id}`, "_blank")
+    }
+  }
+
+  function exportSalairesCSV() {
+    const header = ["Employé", "Matricule", "Poste", "Mois", "Année", "Salaire base", "Primes", "Retenues", "Net à payer", "Statut", "Date paiement"]
+    const rows = filtered.map(s => [
+      `${s.employe.prenom} ${s.employe.nom}`,
+      s.employe.matricule,
+      s.employe.poste,
+      MOIS[s.mois - 1],
+      s.annee,
+      s.salaireBase,
+      s.primes,
+      s.retenues,
+      s.netAPayer,
+      s.statut,
+      s.datePaiement ? new Date(s.datePaiement).toLocaleDateString("fr-FR") : "",
+    ])
+    downloadCSV([header, ...rows], `salaires_${new Date().toISOString().split("T")[0]}.csv`)
+    toast.success(`${filtered.length} fiche(s) exportée(s)`)
+  }
+
   async function supprimerSalaire(id: string) {
     if (!confirm("Supprimer cette fiche de salaire ?")) return
     const res = await fetch(`/api/salaires/${id}`, { method: "DELETE" })
@@ -140,12 +179,18 @@ export default function SalairesPage() {
 
   const hasFiltre = filtreMois !== "TOUS" || filtreAnnee !== "TOUS" || filtreEmp !== "TOUS" || filtreStatut !== "TOUS"
   const enAttente  = salaires.filter(s => s.statut === "EN_ATTENTE")
+
+  // Employés sans fiche pour le mois courant
+  const idsAvecFicheCeMois = new Set(
+    salaires.filter(s => s.mois === currentMonth && s.annee === currentYear).map(s => s.employe.id)
+  )
+  const employesSansFiche = employes.filter(e => !idsAvecFicheCeMois.has(e.id))
   const netPending = enAttente.reduce((a, s) => a + s.netAPayer, 0)
   const netPaye    = salaires.filter(s => s.statut === "PAYE").reduce((a, s) => a + s.netAPayer, 0)
   const netTotal   = salaires.reduce((a, s) => a + s.netAPayer, 0)
-  const previewNet = form.salaireBase
-    ? parseFloat(form.salaireBase) + parseFloat(form.primes || "0") - parseFloat(form.retenues || "0")
-    : 0
+  const previewCalc: DetailsSalaire | null = form.salaireBase
+    ? calculerSalaire(parseFloat(form.salaireBase) || 0, parseFloat(form.primes || "0") || 0, parseFloat(form.retenues || "0") || 0)
+    : null
 
   return (
     <div className="space-y-6">
@@ -156,15 +201,54 @@ export default function SalairesPage() {
           <h1 className="text-2xl font-bold text-slate-900">Salaires & Paie</h1>
           <p className="text-sm text-slate-500 mt-1">{salaires.length} fiche(s) au total</p>
         </div>
-        <button
-          onClick={() => { setEditId(null); setForm(emptyForm(currentMonth, currentYear)); setShowForm(true) }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
-          style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}
-        >
-          <Plus className="h-4 w-4" />
-          Générer une fiche
-        </button>
+        <div className="flex items-center gap-2">
+          {salaires.length > 0 && (
+            <button onClick={exportSalairesCSV}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+              <FileDown className="h-4 w-4" />
+              Export CSV
+            </button>
+          )}
+          <button
+            onClick={() => { setEditId(null); setForm(emptyForm(currentMonth, currentYear)); setShowForm(true) }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+            style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+            <Plus className="h-4 w-4" />
+            Générer une fiche
+          </button>
+        </div>
       </div>
+
+      {/* Bandeau fiches manquantes */}
+      {employesSansFiche.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 px-4 py-3.5"
+          style={{ background: "#fffbeb" }}>
+          <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">
+              {employesSansFiche.length} employé(s) sans fiche pour {MOIS[currentMonth - 1]} {currentYear}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {employesSansFiche.map(e => (
+                <button key={e.id}
+                  onClick={() => {
+                    setEditId(null)
+                    setForm({ employeId: e.id, mois: String(currentMonth), annee: String(currentYear), salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "" })
+                    setShowForm(true)
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
+                  className="text-xs px-2.5 py-1 rounded-full font-medium border transition-colors hover:border-amber-400"
+                  style={{ background: "white", borderColor: "#fde68a", color: "#92400e" }}>
+                  {e.prenom} {e.nom}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-amber-600 mt-2">
+              Cliquez sur un nom pour pré-remplir le formulaire.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       {salaires.length > 0 && (
@@ -200,7 +284,7 @@ export default function SalairesPage() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-1.5 col-span-3">
               <Label className="text-xs font-medium text-slate-600">Employé *</Label>
               <Select value={form.employeId} onValueChange={handleEmployeChange} disabled={!!editId}>
@@ -238,10 +322,32 @@ export default function SalairesPage() {
               <Label className="text-xs font-medium text-slate-600">Notes</Label>
               <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Observations..." />
             </div>
-            {previewNet > 0 && (
-              <div className="col-span-3 rounded-lg px-4 py-3 flex items-center justify-between" style={{ background: "#ecfdf5" }}>
-                <span className="text-sm text-slate-600">Net à payer calculé</span>
-                <span className="text-xl font-black" style={{ color: "#059669" }}>{formatCurrency(previewNet)}</span>
+            {previewCalc && (
+              <div className="col-span-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs space-y-1">
+                <p className="font-semibold text-blue-800 mb-2 text-sm">Simulation — Droit camerounais (CNPS · IRPP · CAC · RAV)</p>
+                {([
+                  { label: "Salaire brut imposable", val: previewCalc.brutImposable, cls: "text-slate-800 font-medium" },
+                  { label: `CNPS salarié 4.2% (plaf. ${CAMEROUN.CNPS_PLAFOND_MENSUEL.toLocaleString("fr-FR")} FCFA)`, val: -previewCalc.cnpsSalarie, cls: "text-red-700" },
+                  { label: "Revenu net imposable", val: previewCalc.revenuNetImposable, cls: "text-slate-500 italic" },
+                  { label: `Abattement forfaitaire (30%, plaf. 25 000)`, val: -previewCalc.abattement, cls: "text-red-700" },
+                  { label: "IRPP (progressif)", val: -previewCalc.irpp, cls: "text-red-700" },
+                  { label: "CAC (10% de l'IRPP)", val: -previewCalc.cac, cls: "text-red-700" },
+                  { label: "RAV (forfait mensuel)", val: -previewCalc.rav, cls: "text-red-700" },
+                  ...(previewCalc.autresRetenues > 0 ? [{ label: "Autres retenues", val: -previewCalc.autresRetenues, cls: "text-red-700" }] : []),
+                ] as { label: string; val: number; cls: string }[]).map(r => (
+                  <div key={r.label} className={`flex justify-between ${r.cls}`}>
+                    <span>{r.label}</span>
+                    <span className="tabular-nums font-medium">{r.val < 0 ? `– ${Math.abs(r.val).toLocaleString("fr-FR")}` : r.val.toLocaleString("fr-FR")} FCFA</span>
+                  </div>
+                ))}
+                <div className="border-t border-blue-300 pt-1.5 mt-1 flex justify-between text-blue-900 font-bold text-sm">
+                  <span>NET À PAYER</span>
+                  <span className="tabular-nums">{formatFCFA(previewCalc.netAPayer)}</span>
+                </div>
+                <div className="border-t border-blue-100 pt-1 mt-1 text-slate-500 space-y-0.5">
+                  <div className="flex justify-between"><span>Charges patronales CNPS (13.2%)</span><span className="tabular-nums">{previewCalc.cnpsPatronal.toLocaleString("fr-FR")} FCFA</span></div>
+                  <div className="flex justify-between text-slate-700 font-medium"><span>Coût total employeur</span><span className="tabular-nums">{previewCalc.coutTotal.toLocaleString("fr-FR")} FCFA</span></div>
+                </div>
               </div>
             )}
             <div className="col-span-3 flex justify-end gap-3">
@@ -258,34 +364,34 @@ export default function SalairesPage() {
       </div>
 
       {/* Filtres */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+      <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
+        <div className="col-span-2 flex items-center gap-1.5 text-xs text-slate-500 font-medium sm:w-auto">
           <Filter className="h-3.5 w-3.5" />
           Filtrer :
         </div>
         <Select value={filtreAnnee} onValueChange={setFiltreAnnee}>
-          <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Année" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-full sm:w-28"><SelectValue placeholder="Année" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Toutes</SelectItem>
             {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreMois} onValueChange={setFiltreMois}>
-          <SelectTrigger className="h-8 text-xs w-32"><SelectValue placeholder="Mois" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-full sm:w-32"><SelectValue placeholder="Mois" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les mois</SelectItem>
             {MOIS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreEmp} onValueChange={setFiltreEmp}>
-          <SelectTrigger className="h-8 text-xs w-44"><SelectValue placeholder="Employé" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-full sm:w-44"><SelectValue placeholder="Employé" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les employés</SelectItem>
             {employes.map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreStatut} onValueChange={setFiltreStatut}>
-          <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Statut" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-full sm:w-36"><SelectValue placeholder="Statut" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les statuts</SelectItem>
             <SelectItem value="EN_ATTENTE">En attente</SelectItem>
@@ -321,75 +427,148 @@ export default function SalairesPage() {
             {!hasFiltre && <p className="text-sm mt-1">Cliquez sur &quot;Générer une fiche&quot; pour commencer</p>}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  {["Employé", "Période", "Base", "± Ajust.", "Net à payer", "Statut", ""].map(h => (
-                    <th key={h} className={`px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide ${h === "Net à payer" || h === "Base" || h === "± Ajust." ? "text-right" : "text-left"}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.map(s => {
-                  const ajust = s.primes - s.retenues
-                  return (
-                    <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                            style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
-                            {initiales(s.employe)}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{s.employe.prenom} {s.employe.nom}</p>
-                            <p className="text-xs text-slate-400">{s.employe.poste}</p>
-                          </div>
+          <>
+            {/* ── Vue mobile : cartes ── */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {filtered.map(s => {
+                const brut = s.brutImposable ?? (s.salaireBase + s.primes)
+                return (
+                  <div key={s.id} className="px-4 py-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                          style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+                          {initiales(s.employe)}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">{MOIS[s.mois - 1]} {s.annee}</td>
-                      <td className="px-6 py-4 text-sm text-right text-slate-600">{formatCurrency(s.salaireBase)}</td>
-                      <td className="px-6 py-4 text-sm text-right font-medium" style={{ color: ajust >= 0 ? "#10b981" : "#ef4444" }}>
-                        {ajust >= 0 ? "+" : ""}{formatCurrency(ajust)}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className="text-base font-black text-slate-900">{formatCurrency(s.netAPayer)}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${s.statut === "PAYE" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{s.employe.prenom} {s.employe.nom}</p>
+                          <p className="text-xs text-slate-400">{MOIS[s.mois - 1]} {s.annee}</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-base font-black text-slate-900">{formatCurrency(s.netAPayer)}</p>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${s.statut === "PAYE" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                           {s.statut === "PAYE" ? "Payé" : "En attente"}
                         </span>
-                        {s.datePaiement && (
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            {new Date(s.datePaiement).toLocaleDateString("fr-FR")}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5">
-                          {s.statut === "EN_ATTENTE" && (
-                            <button onClick={() => marquerPaye(s.id)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
-                              style={{ borderColor: "#bbf7d0", color: "#059669", background: "#f0fdf4" }}>
-                              <Check className="h-3 w-3" /> Payé
-                            </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3 text-xs text-slate-500">
+                        <span>Brut : <b className="text-slate-700">{brut.toLocaleString("fr-FR")}</b></span>
+                        <span className="text-amber-600">CNPS : {(s.cnpsSalarie ?? 0).toLocaleString("fr-FR")}</span>
+                        <span className="text-red-500">Imp. : {((s.irpp ?? 0) + (s.cac ?? 0)).toLocaleString("fr-FR")}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      {s.statut === "EN_ATTENTE" && (
+                        <button onClick={() => marquerPaye(s.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border"
+                          style={{ borderColor: "#bbf7d0", color: "#059669", background: "#f0fdf4" }}>
+                          <Check className="h-3 w-3" /> Payé
+                        </button>
+                      )}
+                      <button onClick={() => openBulletin(s)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600">
+                        <Printer className="h-3 w-3" /> Imprimer
+                      </button>
+                      <button onClick={() => startEdit(s)}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => supprimerSalaire(s.id)}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* ── Vue desktop : tableau ── */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    {[
+                      { label: "Employé", right: false },
+                      { label: "Période", right: false },
+                      { label: "Brut", right: true },
+                      { label: "CNPS sal.", right: true },
+                      { label: "IRPP+CAC", right: true },
+                      { label: "Net à payer", right: true },
+                      { label: "Statut", right: false },
+                      { label: "", right: false },
+                    ].map(h => (
+                      <th key={h.label} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide ${h.right ? "text-right" : "text-left"}`}>{h.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filtered.map(s => {
+                    const brut = s.brutImposable ?? (s.salaireBase + s.primes)
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                              style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+                              {initiales(s.employe)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{s.employe.prenom} {s.employe.nom}</p>
+                              <p className="text-xs text-slate-400">{s.employe.poste}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-600 whitespace-nowrap">{MOIS[s.mois - 1]} {s.annee}</td>
+                        <td className="px-4 py-4 text-sm text-right text-slate-600 tabular-nums">{brut.toLocaleString("fr-FR")}</td>
+                        <td className="px-4 py-4 text-sm text-right tabular-nums" style={{ color: "#f59e0b" }}>{(s.cnpsSalarie ?? 0).toLocaleString("fr-FR")}</td>
+                        <td className="px-4 py-4 text-sm text-right tabular-nums" style={{ color: "#ef4444" }}>{((s.irpp ?? 0) + (s.cac ?? 0)).toLocaleString("fr-FR")}</td>
+                        <td className="px-4 py-4 text-right">
+                          <span className="text-base font-black text-slate-900">{formatCurrency(s.netAPayer)}</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${s.statut === "PAYE" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                            {s.statut === "PAYE" ? "Payé" : "En attente"}
+                          </span>
+                          {s.datePaiement && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {new Date(s.datePaiement).toLocaleDateString("fr-FR")}
+                            </p>
                           )}
-                          <button onClick={() => startEdit(s)}
-                            className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => supprimerSalaire(s.id)}
-                            className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1.5">
+                            {s.statut === "EN_ATTENTE" && (
+                              <button onClick={() => marquerPaye(s.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                                style={{ borderColor: "#bbf7d0", color: "#059669", background: "#f0fdf4" }}>
+                                <Check className="h-3 w-3" /> Payé
+                              </button>
+                            )}
+                            <button onClick={() => openBulletin(s)}
+                              title="Télécharger le bulletin PDF"
+                              className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => startEdit(s)}
+                              className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => supprimerSalaire(s.id)}
+                              className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

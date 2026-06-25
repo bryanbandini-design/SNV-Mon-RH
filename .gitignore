@@ -47,3 +47,18 @@ next-env.d.ts
 *.db-journal
 *.db-shm
 *.db-wal
+
+# Capacitor native builds
+/android/
+/ios/
+
+# Logs
+/logs/
+
+# Large binary / local config files
+ecosystem.config.js
+Caddyfile
+prisma/inject.ts
+prisma/inject2.ts
+scripts/
+resources/

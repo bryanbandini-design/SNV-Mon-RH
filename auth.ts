@@ -2,13 +2,13 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { logActivity } from "@/lib/activity-log"
+import { authConfig } from "@/auth.config"
+import { parsePermissions, DEFAULT_PERMISSIONS } from "@/lib/permissions"
+import type { PermKey } from "@/lib/permissions"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret:    process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET,
-  trustHost: true,
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -27,41 +27,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const ok = await bcrypt.compare(password, user.passwordHash)
         if (!ok) return null
 
-        return { id: user.id, email: user.email, name: user.name, role: user.role, employeId: user.employeId ?? null }
+        // Log connexion réussie
+        await logActivity({
+          userId:   user.id,
+          userName: user.name,
+          userRole: user.role,
+          action:   "LOGIN",
+          module:   "AUTH",
+          description: `Connexion de ${user.name} (${user.email})`,
+          metadata: { email: user.email, role: user.role },
+        })
+
+        // Si permissions vide, utiliser les valeurs par défaut du rôle
+        const stored = parsePermissions(user.permissions)
+        const permissions: PermKey[] = stored.length > 0
+          ? stored
+          : (DEFAULT_PERMISSIONS[user.role] ?? [])
+
+        return { id: user.id, email: user.email, name: user.name, role: user.role, employeId: user.employeId ?? null, permissions }
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id        = user.id
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.role      = (user as any).role      ?? "RH"
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.employeId = (user as any).employeId ?? null
-      }
-      // Re-fetch role/employeId from DB if missing from token (stale session)
-      if (token.id && !token.role) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { role: true, employeId: true },
-        })
-        if (dbUser) {
-          token.role      = dbUser.role
-          token.employeId = dbUser.employeId ?? null
-        }
-      }
-      return token
-    },
-    session({ session, token }) {
-      if (session.user) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const u = session.user as any
-        u.id        = token.id        as string
-        u.role      = token.role      as string
-        u.employeId = token.employeId as string | null
-      }
-      return session
-    },
-  },
 })

@@ -33,7 +33,8 @@ export async function POST(req: Request) {
   const bytes  = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
 
-  const uploadDir = join(process.cwd(), "uploads", "disciplinaire")
+  const uploadBase = process.env.UPLOAD_DIR ?? join(process.cwd(), "uploads")
+  const uploadDir  = join(uploadBase, "disciplinaire")
   if (!existsSync(uploadDir)) await mkdir(uploadDir, { recursive: true })
 
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")

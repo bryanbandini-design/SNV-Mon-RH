@@ -16,7 +16,9 @@ export async function GET() {
     take: 50,
   })
 
-  return NextResponse.json(notifications)
+  return NextResponse.json(notifications, {
+    headers: { "Cache-Control": "private, max-age=20, stale-while-revalidate=40" },
+  })
 }
 
 // PATCH /api/notifications  → { ids: string[] } pour marquer comme lus

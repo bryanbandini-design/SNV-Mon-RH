@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { logActivity } from "@/lib/activity-log"
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -15,7 +16,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     include: { employe: { select: { prenom: true, nom: true, utilisateur: { select: { id: true } } } } },
   })
 
-  // Notifier l'employé s'il a un compte
   const employeUser = conge.employe?.utilisateur
   if (employeUser && (statut === "APPROUVE" || statut === "REFUSE")) {
     const debut = new Date(conge.dateDebut).toLocaleDateString("fr-FR")
@@ -32,6 +32,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   }
 
+  const actionLabel = statut === "APPROUVE" ? "Approbation" : statut === "REFUSE" ? "Refus" : "Mise à jour"
+  await logActivity({
+    session,
+    action: statut === "APPROUVE" ? "APPROVE" : statut === "REFUSE" ? "REJECT" : "UPDATE",
+    module: "CONGES",
+    description: `${actionLabel} du congé ${conge.type} de ${conge.employe.prenom} ${conge.employe.nom}${commentaire ? ` — ${commentaire}` : ""}`,
+    entityId: id,
+    entityType: "Conge",
+    metadata: { statut, type: conge.type },
+  })
+
   return NextResponse.json(conge)
 }
 
@@ -40,6 +51,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
 
   const { id } = await params
+  const conge = await prisma.conge.findUnique({
+    where: { id },
+    include: { employe: { select: { prenom: true, nom: true } } },
+  })
   await prisma.conge.delete({ where: { id } })
+
+  await logActivity({
+    session,
+    action: "DELETE",
+    module: "CONGES",
+    description: `Suppression de la demande de congé de ${conge?.employe.prenom ?? ""} ${conge?.employe.nom ?? ""}`,
+    entityId: id,
+    entityType: "Conge",
+  })
+
   return NextResponse.json({ ok: true })
 }

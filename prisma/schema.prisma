@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ─── UTILISATEURS ──────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ model User {
   passwordHash String
   name         String
   role         String   @default("RH") // RH | RESPONSABLE | ADMIN | EMPLOYE
+  permissions  String   @default("[]")  // JSON array de clés de modules
   employeId    String?  @unique          // renseigné uniquement pour rôle EMPLOYE
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -54,6 +55,12 @@ model Employe {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  faceDescriptor         String?   // JSON : Float32Array[128] sérialisé pour face-api.js
+  managerId              String?   // référence vers un autre Employe (organigramme)
+  contactUrgenceNom      String?
+  contactUrgenceTel      String?
+  zktecoPin              String?   @unique  // PIN enregistré sur le terminal ZKTeco (ex: "1234")
+
   conges                 Conge[]
   dossiersDisciplinaires DossierDisciplinaire[]
   historiqueSalaires     HistoriqueSalaire[]
@@ -61,7 +68,9 @@ model Employe {
   evaluations            Evaluation[]
   presences              Presence[]
   affectationsShift      AffectationShift[]
+  pointages              Pointage[]
   utilisateur            User?
+  formations             ParticipationFormation[]
 }
 
 // ─── CONGÉS ────────────────────────────────────────────────────────────────
@@ -219,7 +228,15 @@ model HistoriqueSalaire {
   annee        Int
   salaireBase  Float
   primes       Float     @default(0)
-  retenues     Float     @default(0)
+  retenues     Float     @default(0)   // autres retenues manuelles (avances, absences…)
+  // ── Cotisations Cameroun (calculées automatiquement) ──
+  cnpsSalarie  Float     @default(0)   // 4.2% du brut plafonné à 750 000 FCFA
+  irpp         Float     @default(0)   // IRPP mensuel (barème progressif)
+  cac          Float     @default(0)   // 10% de l'IRPP (Centimes Add. Communaux)
+  rav          Float     @default(625) // Redevance Audiovisuelle mensuelle
+  // ── Charges patronales (informatif) ──
+  cnpsPatronal Float     @default(0)   // 13.2% du brut plafonné (3.7+7+2.5)
+  brutImposable Float    @default(0)   // Brut = base + primes
   netAPayer    Float
   statut       String    @default("EN_ATTENTE")
   datePaiement DateTime?
@@ -325,7 +342,182 @@ model Presence {
   minutesRetard     Int      @default(0)
   statut            String   @default("PRESENT")
   notes             String?
+  // ── Saisie manuelle (panne de courant, etc.) ──────────────────────────────
+  saisieManuelle    Boolean  @default(false)
+  statutValidation  String   @default("VALIDEE")  // VALIDEE | EN_ATTENTE | REJETEE
+  saisieParNom      String?  // nom de la personne ayant saisi
+  motifManuel       String?  // motif de la saisie manuelle
   createdAt         DateTime @default(now())
 
   employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+}
+
+// ─── MODULE POINTAGE QR + FACIAL + ZKTECO ─────────────────────────────────
+
+model ZktecoDevice {
+  id           String    @id @default(cuid())
+  serialNumber String    @unique  // Numéro de série du terminal (SN)
+  nom          String    @default("Terminal ZKTeco")
+  lieu         String?             // ex: "Entrée principale", "Atelier B"
+  actif        Boolean   @default(true)
+  lastSyncAt   DateTime?           // Dernière communication reçue
+  totalPushes  Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  pointages    Pointage[]
+}
+
+model Atelier {
+  id        String   @id @default(cuid())
+  nom       String
+  code      String   @unique  // ex: "ATELIER_A", "BUREAU_RH" — contenu du QR code
+  couleur   String   @default("#3b82f6")
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pointages Pointage[]
+}
+
+model Pointage {
+  id            String    @id @default(cuid())
+  employeId     String
+  atelierId     String?   // null si l'employé n'a pas encore scanné le 2e QR
+  dateEntree    DateTime  @default(now())
+  dateSortie    DateTime?
+  faceVerified  Boolean   @default(false)
+  faceScore     Float?    // distance euclidienne face-api.js (plus petit = meilleure correspondance)
+  statut        String    @default("EN_ATTENTE")
+  // EN_ATTENTE   → arrivée scannée, en attente du QR atelier
+  // CONFIRME     → QR atelier + face OK / ZKTeco empreinte OK
+  // FACE_ECHEC   → reconnaissance faciale échouée
+  // MANUEL       → saisi ou corrigé manuellement par RH
+  // SORTI        → départ enregistré
+  verifyMethod  String?   // "empreinte" | "carte" | "face" | "mdp" | "qr_face"
+  source        String    @default("QR")  // "QR" | "ZKTECO" | "MANUEL"
+  zktecoDeviceId String?
+  noteRH        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employe       Employe       @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  atelier       Atelier?      @relation(fields: [atelierId], references: [id], onDelete: SetNull)
+  zktecoDevice  ZktecoDevice? @relation(fields: [zktecoDeviceId], references: [id], onDelete: SetNull)
+}
+
+// ─── HISTORIQUE DES INTERACTIONS ──────────────────────────────────────────
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String?  // null pour les actions système ou pointage sans login
+  userName    String?
+  userRole    String?
+  action      String   // CREATE | UPDATE | DELETE | APPROVE | REJECT | LOGIN | POINTAGE_ENTREE | POINTAGE_CONFIRME | UPLOAD | ENROLL_FACE
+  module      String   // EMPLOYES | CONGES | SALAIRES | EVALUATIONS | DISCIPLINAIRE | POINTAGE | HORAIRES | AUTH
+  description String
+  entityId    String?  // id de la ressource affectée
+  entityType  String?  // "Employe" | "Conge" | "Salaire" | "Evaluation" | "Pointage" | etc.
+  metadata    String?  // JSON sérialisé (données supplémentaires)
+  createdAt   DateTime @default(now())
+}
+
+// ─── PARAMÈTRES GLOBAUX ────────────────────────────────────────────────────
+
+model Parametre {
+  id        String   @id @default(cuid())
+  cle       String   @unique
+  valeur    String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── MODULE RECRUTEMENT ────────────────────────────────────────────────────
+
+model Offre {
+  id            String   @id @default(cuid())
+  titre         String
+  departement   String?
+  typeContrat   String   @default("CDI")
+  localisation  String?
+  description   String?
+  salaireFourchette String?
+  statut        String   @default("OUVERTE")  // OUVERTE | POURVUE | SUSPENDUE | FERMEE
+  priorite      String   @default("NORMALE")  // BASSE | NORMALE | HAUTE | URGENTE
+  dateOuverture DateTime @default(now())
+  dateCloture   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  candidats Candidat[]
+}
+
+model Candidat {
+  id          String   @id @default(cuid())
+  offreId     String
+  prenom      String
+  nom         String
+  email       String?
+  telephone   String?
+  source      String?  // LINKEDIN | INDEED | RECOMMANDATION | SITE_WEB | AUTRE
+  cvUrl       String?
+  lettreUrl   String?
+  statut      String   @default("RECU")  // RECU | QUALIFIE | ENTRETIEN | TEST | OFFRE | EMBAUCHE | REFUSE | ABANDONNE
+  noteGlobale Float?
+  commentaire String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  offre      Offre      @relation(fields: [offreId], references: [id], onDelete: Cascade)
+  entretiens Entretien[]
+}
+
+model Entretien {
+  id          String   @id @default(cuid())
+  candidatId  String
+  type        String   @default("TELEPHONIQUE")  // TELEPHONIQUE | VISIO | PRESENTIEL | TECHNIQUE
+  date        DateTime
+  dureeMin    Int?
+  intervieweur String?
+  note        Float?
+  commentaire String?
+  statut      String   @default("PLANIFIE")  // PLANIFIE | REALISE | ANNULE | REPORTE
+  createdAt   DateTime @default(now())
+
+  candidat Candidat @relation(fields: [candidatId], references: [id], onDelete: Cascade)
+}
+
+// ─── MODULE FORMATION ─────────────────────────────────────────────────────
+
+model Formation {
+  id            String   @id @default(cuid())
+  titre         String
+  type          String   @default("INTERNE")  // INTERNE | EXTERNE | E_LEARNING | CERTIFICATION
+  organisme     String?
+  description   String?
+  dureeHeures   Float?
+  cout          Float?
+  dateDebut     DateTime?
+  dateFin       DateTime?
+  lieu          String?
+  statut        String   @default("PLANIFIE")  // PLANIFIE | EN_COURS | TERMINE | ANNULE
+  maxParticipants Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  participations ParticipationFormation[]
+}
+
+model ParticipationFormation {
+  id          String   @id @default(cuid())
+  formationId String
+  employeId   String
+  statut      String   @default("INSCRIT")  // INSCRIT | PRESENT | ABSENT | VALIDE | ECHEC
+  note        Float?
+  certificat  Boolean  @default(false)
+  commentaire String?
+  createdAt   DateTime @default(now())
+
+  formation Formation @relation(fields: [formationId], references: [id], onDelete: Cascade)
+  employe   Employe   @relation(fields: [employeId], references: [id], onDelete: Cascade)
+
+  @@unique([formationId, employeId])
 }

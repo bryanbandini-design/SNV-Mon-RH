@@ -9,11 +9,28 @@ export async function GET() {
   const employeId = (session.user as any)?.employeId as string | null
   if (!employeId) return NextResponse.json({ message: "Aucun profil employé lié" }, { status: 403 })
 
-  const conges = await prisma.conge.findMany({
-    where:   { employeId },
-    orderBy: { createdAt: "desc" },
+  const [conges, employe] = await Promise.all([
+    prisma.conge.findMany({ where: { employeId }, orderBy: { createdAt: "desc" } }),
+    prisma.employe.findUnique({ where: { id: employeId }, select: { soldeCongesAnnuels: true } }),
+  ])
+
+  const currentYear = new Date().getFullYear()
+  const joursAnnuelsPris = conges
+    .filter(c => c.type === "ANNUEL" && c.statut === "APPROUVE" && new Date(c.dateDebut).getFullYear() === currentYear)
+    .reduce((s, c) => s + c.nbJours, 0)
+
+  const soldeAnnuel = employe?.soldeCongesAnnuels ?? 30
+
+  return NextResponse.json({
+    conges,
+    solde: {
+      annuel:  soldeAnnuel,
+      pris:    joursAnnuelsPris,
+      restant: soldeAnnuel - joursAnnuelsPris,
+    },
+  }, {
+    headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=60" },
   })
-  return NextResponse.json(conges)
 }
 
 export async function POST(req: Request) {

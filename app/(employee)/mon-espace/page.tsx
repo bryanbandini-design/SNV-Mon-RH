@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { formatCurrency, formatDate, MOIS } from "@/lib/utils"
-import { Calendar, DollarSign, Star, Clock, CheckCircle, XCircle, AlertCircle, ChevronRight } from "lucide-react"
+import { Calendar, DollarSign, Star, Clock, CheckCircle, XCircle, AlertCircle, ChevronRight, FolderOpen } from "lucide-react"
 
 export default async function MonEspacePage() {
   const session = await auth()
@@ -32,6 +32,10 @@ export default async function MonEspacePage() {
   const prochaineAffect = employe.affectationsShift[0]
   const congesEnAttente = employe.conges.filter(c => c.statut === "EN_ATTENTE").length
   const congesApprouves = employe.conges.filter(c => c.statut === "APPROUVE").length
+
+  const nbDocuments = await prisma.document.count({
+    where: { employeId, dossierDisciplinaireId: null },
+  })
 
   const now = new Date()
   const diffMois = Math.floor((now.getTime() - new Date(employe.dateEmbauche).getTime()) / (1000 * 60 * 60 * 24 * 30))
@@ -147,6 +151,27 @@ export default async function MonEspacePage() {
             </div>
           ) : (
             <p className="text-sm text-slate-400">Aucune affectation à venir</p>
+          )}
+        </Link>
+
+        {/* Mes documents */}
+        <Link href="/mon-espace/documents" className="group rounded-xl border border-slate-200 bg-white p-5 hover:border-emerald-300 hover:shadow-sm transition-all">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-sky-100 flex items-center justify-center">
+                <FolderOpen className="h-4.5 w-4.5 text-sky-600" />
+              </div>
+              <p className="font-semibold text-slate-900 text-sm">Mes documents</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+          </div>
+          {nbDocuments > 0 ? (
+            <div>
+              <p className="text-2xl font-black text-slate-900">{nbDocuments}</p>
+              <p className="text-xs text-slate-400 mt-1">document(s) disponible(s)</p>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Aucun document partagé</p>
           )}
         </Link>
 

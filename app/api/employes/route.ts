@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { logActivity } from "@/lib/activity-log"
 
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
 
-  const employes = await prisma.employe.findMany({ orderBy: { nom: "asc" } })
-  return NextResponse.json(employes)
+  const employes = await prisma.employe.findMany({
+    orderBy: { nom: "asc" },
+    include: { utilisateur: { select: { role: true } } },
+  })
+  const result = employes.map(({ utilisateur, ...e }) => ({
+    ...e,
+    userRole: utilisateur?.role ?? null,
+  }))
+  return NextResponse.json(result, {
+    headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=120" },
+  })
 }
 
 export async function POST(req: Request) {
@@ -44,6 +54,16 @@ export async function POST(req: Request) {
       salaireBase: parseFloat(data.salaireBase),
       notes: data.notes || null,
     },
+  })
+
+  await logActivity({
+    session,
+    action: "CREATE",
+    module: "EMPLOYES",
+    description: `Création de la fiche employé ${employe.prenom} ${employe.nom} (${employe.matricule})`,
+    entityId: employe.id,
+    entityType: "Employe",
+    metadata: { poste: employe.poste, typeContrat: employe.typeContrat },
   })
 
   return NextResponse.json(employe, { status: 201 })

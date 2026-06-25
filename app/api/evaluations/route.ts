@@ -25,7 +25,9 @@ export async function GET(req: Request) {
     },
     orderBy: { dateEval: "desc" },
   })
-  return NextResponse.json(evaluations)
+  return NextResponse.json(evaluations, {
+    headers: { "Cache-Control": "private, max-age=120, stale-while-revalidate=300" },
+  })
 }
 
 export async function POST(req: Request) {

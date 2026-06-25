@@ -4,6 +4,7 @@
   --sidebar-w: 260px;
 }
 
+
 /* ── Base ──────────────────────────────────────────── */
 body {
   background: #f1f5f9;
@@ -13,7 +14,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+  /* Supprime le délai de 300ms sur les taps mobiles */
+  touch-action: manipulation;
+  /* Supprime le flash bleu/gris au tap sur Android */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Feedback tactile immédiat ──────────────────────── */
+/* Les boutons et liens réagissent visuellement dès le touch */
+button:active,
+a:active,
+[role="button"]:active {
+  opacity: 0.72;
+  transform: scale(0.97);
+  transition: opacity 0.05s, transform 0.05s;
+}
+
+/* Pas de scale sur les liens de navigation sidebar (ils ont leur propre style) */
+nav a:active {
+  opacity: 0.8;
+  transform: none;
+}
 
 /* ── Scrollbar ─────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }

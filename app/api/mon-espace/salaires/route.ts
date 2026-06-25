@@ -21,5 +21,7 @@ export async function GET() {
     }),
   ])
 
-  return NextResponse.json({ employe, salaires })
+  return NextResponse.json({ employe, salaires }, {
+    headers: { "Cache-Control": "private, max-age=120, stale-while-revalidate=300" },
+  })
 }

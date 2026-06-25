@@ -10,6 +10,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const data = await req.json()
 
+  // Validation admin d'une saisie manuelle
+  if (data.action === "VALIDER" || data.action === "REJETER") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const role = (session.user as any)?.role
+    if (role !== "ADMIN") {
+      return NextResponse.json({ message: "Réservé à l'administrateur" }, { status: 403 })
+    }
+    const presence = await prisma.presence.update({
+      where: { id },
+      data: { statutValidation: data.action === "VALIDER" ? "VALIDEE" : "REJETEE" },
+      include: { employe: { select: { prenom: true, nom: true, matricule: true, poste: true } } },
+    })
+    return NextResponse.json(presence)
+  }
+
   let heuresTravaillees: number | null = null
   let minutesRetard = 0
 

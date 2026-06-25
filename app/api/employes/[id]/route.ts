@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { logActivity } from "@/lib/activity-log"
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -40,8 +41,22 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       salaireBase: parseFloat(data.salaireBase),
       statut: data.statut,
       notes: data.notes || null,
+      managerId: data.managerId || null,
+      contactUrgenceNom: data.contactUrgenceNom || null,
+      contactUrgenceTel: data.contactUrgenceTel || null,
     },
   })
+
+  await logActivity({
+    session,
+    action: "UPDATE",
+    module: "EMPLOYES",
+    description: `Modification de la fiche de ${employe.prenom} ${employe.nom} — statut : ${employe.statut}`,
+    entityId: employe.id,
+    entityType: "Employe",
+    metadata: { poste: employe.poste, statut: employe.statut },
+  })
+
   return NextResponse.json(employe)
 }
 
@@ -49,6 +64,18 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const session = await auth()
   if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
   const { id } = await params
+
+  const employe = await prisma.employe.findUnique({ where: { id }, select: { prenom: true, nom: true, matricule: true } })
   await prisma.employe.delete({ where: { id } })
+
+  await logActivity({
+    session,
+    action: "DELETE",
+    module: "EMPLOYES",
+    description: `Suppression de l'employé ${employe?.prenom ?? ""} ${employe?.nom ?? ""} (${employe?.matricule ?? id})`,
+    entityId: id,
+    entityType: "Employe",
+  })
+
   return NextResponse.json({ ok: true })
 }

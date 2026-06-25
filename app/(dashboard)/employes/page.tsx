@@ -14,15 +14,16 @@ export default async function EmployesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start sm:items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Employés</h1>
-          <p className="text-slate-500 mt-1">{employes.filter(e => e.statut === "ACTIF").length} actif(s) · {employes.length} au total</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Employés</h1>
+          <p className="text-slate-500 mt-1 text-sm">{employes.filter(e => e.statut === "ACTIF").length} actif(s) · {employes.length} au total</p>
         </div>
         <Link href="/employes/nouveau">
           <Button className="shadow-sm">
             <Plus className="h-4 w-4" />
-            Nouvel employé
+            <span className="hidden sm:inline">Nouvel employé</span>
+            <span className="sm:hidden">Nouveau</span>
           </Button>
         </Link>
       </div>

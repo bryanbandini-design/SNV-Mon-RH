@@ -6,9 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import {
   ArrowLeft, Calendar, AlertTriangle, DollarSign, Edit,
   Phone, Mail, MapPin, FlaskConical, Briefcase, Clock, Star,
+  GitCommitHorizontal, TrendingUp, ShieldAlert, FileText, Download,
 } from "lucide-react"
+import { AttestationButtons } from "@/components/employes/attestation-buttons"
 import { formatDate, formatCurrency, MOIS } from "@/lib/utils"
 import { CompteAccessPanel } from "@/components/employes/compte-access-panel"
+import { FaceEnrollButton } from "@/components/employes/face-enroll-button"
 
 export default async function EmployePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -34,7 +37,7 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
     ? `${Math.floor(diffMois / 12)} an${Math.floor(diffMois / 12) > 1 ? "s" : ""}`
     : `${diffMois} mois`
 
-  const congesApprouves = employe.conges.filter(c => c.statut === "APPROUVE").length
+  const congesApprouves = employe.conges.filter((c: { statut: string }) => c.statut === "APPROUVE").length
   const derniereEval = employe.evaluations[0]
 
   const statutColor: Record<string, string> = {
@@ -47,6 +50,27 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
   const sb = statutBg[employe.statut]   ?? "#f8fafc"
 
   const essaiActif = employe.periodeEssai && employe.dateFinEssai && now < new Date(employe.dateFinEssai)
+
+  // Timeline carrière
+  type TLIcon = "briefcase" | "star" | "shield"
+  type TimelineEvent = { date: Date | string; label: string; detail: string; color: string; bg: string; icon: TLIcon }
+  const timelineRaw: TimelineEvent[] = [
+    { date: employe.dateEmbauche, label: "Embauche", detail: `${employe.typeContrat} · ${employe.poste}`, color: "#3b82f6", bg: "#eff6ff", icon: "briefcase" },
+  ]
+  for (const ev of employe.evaluations) {
+    timelineRaw.push({
+      date:   ev.dateEval,
+      label:  `Évaluation ${ev.typeEvaluation.replace(/_/g, " ")} — ${ev.scoreGlobal.toFixed(1)}/5`,
+      detail: ev.periode + (ev.recommandation ? ` · ${ev.recommandation.replace(/_/g, " ")}` : ""),
+      color:  ev.scoreGlobal >= 4 ? "#10b981" : ev.scoreGlobal >= 3 ? "#f59e0b" : "#ef4444",
+      bg:     ev.scoreGlobal >= 4 ? "#ecfdf5" : ev.scoreGlobal >= 3 ? "#fffbeb" : "#fef2f2",
+      icon:   "star",
+    })
+  }
+  for (const d of employe.dossiersDisciplinaires) {
+    timelineRaw.push({ date: d.date, label: d.type.replace(/_/g, " "), detail: d.motif, color: "#ef4444", bg: "#fef2f2", icon: "shield" })
+  }
+  const timelineEvents = timelineRaw.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const joursEssai = employe.dateFinEssai
     ? Math.ceil((new Date(employe.dateFinEssai).getTime() - now.getTime()) / 86400000)
     : 0
@@ -62,12 +86,16 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
             Retour aux employés
           </button>
         </Link>
-        <Link href={`/employes/${employe.id}/modifier`}>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            <Edit className="h-4 w-4" />
-            Modifier la fiche
-          </button>
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <AttestationButtons employeId={employe.id} />
+          <FaceEnrollButton employeId={employe.id} hasFace={!!employe.faceDescriptor} />
+          <Link href={`/employes/${employe.id}/modifier`}>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <Edit className="h-4 w-4" />
+              Modifier la fiche
+            </button>
+          </Link>
+        </div>
       </div>
 
       {/* ── Hero ───────────────────────────────────── */}
@@ -192,6 +220,45 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
               )}
             </div>
           </div>
+
+          {/* Timeline carrière */}
+          {timelineEvents.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                <GitCommitHorizontal className="h-4 w-4 text-indigo-500" />
+                <span className="font-semibold text-slate-900 text-sm">Parcours & historique</span>
+              </div>
+              <div className="p-6">
+                <div className="relative">
+                  {/* Ligne verticale */}
+                  <div className="absolute left-[18px] top-2 bottom-2 w-px bg-slate-100" />
+                  <div className="space-y-5">
+                    {timelineEvents.map((ev, i) => {
+                      const IconComp = ev.icon === "star" ? TrendingUp : ev.icon === "shield" ? ShieldAlert : Briefcase
+                      return (
+                        <div key={i} className="flex gap-4 relative">
+                          {/* Dot */}
+                          <div className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 ring-2 ring-white"
+                            style={{ background: ev.bg }}>
+                            <IconComp className="h-4 w-4" style={{ color: ev.color }} />
+                          </div>
+                          <div className="flex-1 min-w-0 pt-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-900 leading-snug">{ev.label}</p>
+                              <time className="text-xs text-slate-400 flex-shrink-0 mt-0.5">
+                                {new Date(ev.date).toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}
+                              </time>
+                            </div>
+                            {ev.detail && <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{ev.detail}</p>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Congés */}
           <div className="rounded-xl border border-slate-200 bg-white">

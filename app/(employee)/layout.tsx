@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { redirect } from "next/navigation"
-import { Menu, X, LayoutDashboard, User, DollarSign, Calendar, Clock, Star, LogOut } from "lucide-react"
+import { Menu, X, LayoutDashboard, User, DollarSign, Calendar, Clock, Star, FolderOpen, LogOut } from "lucide-react"
 import { signOut } from "next-auth/react"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { cn } from "@/lib/utils"
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/mon-espace/conges",      label: "Mes congés",      icon: Calendar        },
   { href: "/mon-espace/planning",    label: "Mon planning",    icon: Clock           },
   { href: "/mon-espace/evaluations", label: "Mes évaluations", icon: Star            },
+  { href: "/mon-espace/documents",   label: "Mes documents",   icon: FolderOpen      },
 ]
 
 function EmployeeSidebar({ open, onClose, employe }: {

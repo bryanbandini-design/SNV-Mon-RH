@@ -22,12 +22,14 @@ export default function ModifierEmployePage() {
   const [saving, setSaving] = useState(false)
   const [periodeEssai, setPeriodeEssai] = useState(false)
   const [form, setForm] = useState<Record<string, string>>({})
+  const [employes, setEmployes] = useState<{ id: string; prenom: string; nom: string; poste: string }[]>([])
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/employes/${id}`)
-      .then(r => r.json())
-      .then(emp => {
+    Promise.all([
+      fetch(`/api/employes/${id}`).then(r => r.json()),
+      fetch("/api/employes").then(r => r.json()),
+    ]).then(([emp, allEmps]) => {
         setForm({
           prenom: emp.prenom ?? "",
           nom: emp.nom ?? "",
@@ -48,8 +50,10 @@ export default function ModifierEmployePage() {
           dateDebutEssai: emp.dateDebutEssai ? emp.dateDebutEssai.split("T")[0] : "",
           dateFinEssai: emp.dateFinEssai ? emp.dateFinEssai.split("T")[0] : "",
           notes: emp.notes ?? "",
+          managerId: emp.managerId ?? "",
         })
         setPeriodeEssai(emp.periodeEssai ?? false)
+        if (Array.isArray(allEmps)) setEmployes(allEmps.filter((e: { id: string }) => e.id !== id))
       })
       .finally(() => setLoading(false))
   }, [id])
@@ -142,6 +146,14 @@ export default function ModifierEmployePage() {
             <div className="space-y-2"><Label>Date d&apos;embauche *</Label><Input type="date" value={form.dateEmbauche ?? ""} onChange={e => set("dateEmbauche", e.target.value)} required /></div>
             <div className="space-y-2"><Label>Fin de contrat</Label><Input type="date" value={form.dateFinContrat ?? ""} onChange={e => set("dateFinContrat", e.target.value)} /></div>
             <div className="space-y-2"><Label>Salaire de base *</Label><Input type="number" value={form.salaireBase ?? ""} onChange={e => set("salaireBase", e.target.value)} required /></div>
+            <div className="space-y-2">
+              <Label>Manager / Responsable hiérarchique</Label>
+              <select value={form.managerId ?? ""} onChange={e => set("managerId", e.target.value)}
+                className="w-full h-9 text-sm border border-input rounded-md px-3 bg-background focus:outline-none focus:ring-1 focus:ring-ring">
+                <option value="">— Aucun (racine de l'organigramme)</option>
+                {employes.map(e => <option key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</option>)}
+              </select>
+            </div>
             <div className="space-y-2 sm:col-span-2"><Label>Notes</Label><Textarea value={form.notes ?? ""} onChange={e => set("notes", e.target.value)} rows={3} /></div>
           </CardContent>
         </Card>

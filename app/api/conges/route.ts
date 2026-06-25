@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { logActivity } from "@/lib/activity-log"
 
 export async function GET() {
   const session = await auth()
@@ -10,7 +11,9 @@ export async function GET() {
     include: { employe: { select: { prenom: true, nom: true, matricule: true } } },
     orderBy: { createdAt: "desc" },
   })
-  return NextResponse.json(conges)
+  return NextResponse.json(conges, {
+    headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=60" },
+  })
 }
 
 export async function POST(req: Request) {
@@ -34,6 +37,17 @@ export async function POST(req: Request) {
       motif: data.motif || null,
       statut: "EN_ATTENTE",
     },
+    include: { employe: { select: { prenom: true, nom: true } } },
+  })
+
+  await logActivity({
+    session,
+    action: "CREATE",
+    module: "CONGES",
+    description: `Demande de congé ${conge.type} pour ${conge.employe.prenom} ${conge.employe.nom} — ${nbJours} jour(s)`,
+    entityId: conge.id,
+    entityType: "Conge",
+    metadata: { type: conge.type, nbJours, dateDebut: data.dateDebut, dateFin: data.dateFin },
   })
 
   return NextResponse.json(conge, { status: 201 })

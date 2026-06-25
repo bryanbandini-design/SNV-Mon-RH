@@ -4,8 +4,8 @@ import { Toaster } from "sonner"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Mon RH",
-  description: "Plateforme de gestion des ressources humaines",
+  title: "SANOVIA RH",
+  description: "Plateforme de gestion des ressources humaines — SANOVIA Health Care",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

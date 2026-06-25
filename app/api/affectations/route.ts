@@ -39,7 +39,9 @@ export async function GET(req: Request) {
     }),
   ])
 
-  return NextResponse.json({ affectations, presences })
+  return NextResponse.json({ affectations, presences }, {
+    headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=60" },
+  })
 }
 
 // POST: Create manual shift assignment for one employee

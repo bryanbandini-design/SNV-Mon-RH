@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
-import { Plus, Calendar, CheckCircle, XCircle, AlertCircle, Loader2, Trash2 } from "lucide-react"
+import { Plus, Calendar, CheckCircle, XCircle, AlertCircle, Loader2, Trash2, Umbrella } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -12,6 +12,8 @@ type Conge = {
   id: string; type: string; dateDebut: string; dateFin: string
   nbJours: number; motif: string | null; statut: string; commentaire: string | null
 }
+
+type SoldeInfo = { annuel: number; pris: number; restant: number }
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof CheckCircle }> = {
   APPROUVE:   { label: "Approuvé",   color: "#10b981", bg: "#ecfdf5", icon: CheckCircle },
@@ -25,6 +27,7 @@ function formatDateFr(d: string) {
 
 export default function MesCongesPage() {
   const [conges, setConges]   = useState<Conge[]>([])
+  const [solde, setSolde]     = useState<SoldeInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -34,12 +37,24 @@ export default function MesCongesPage() {
   useEffect(() => {
     fetch("/api/mon-espace/conges")
       .then(r => r.json())
-      .then(d => { setConges(Array.isArray(d) ? d : []); setLoading(false) })
+      .then(d => {
+        if (d.conges) {
+          setConges(Array.isArray(d.conges) ? d.conges : [])
+          setSolde(d.solde ?? null)
+        } else if (Array.isArray(d)) {
+          setConges(d)
+        }
+        setLoading(false)
+      })
   }, [])
 
   const nbJoursPrev = form.dateDebut && form.dateFin
     ? Math.max(0, Math.ceil((new Date(form.dateFin).getTime() - new Date(form.dateDebut).getTime()) / 86400000) + 1)
     : 0
+
+  const soldeApresDeduction = solde && form.type === "ANNUEL" && nbJoursPrev > 0
+    ? solde.restant - nbJoursPrev
+    : null
 
   async function soumettre(e: React.FormEvent) {
     e.preventDefault()
@@ -53,12 +68,15 @@ export default function MesCongesPage() {
     if (res.ok) {
       const c = await res.json()
       setConges(prev => [c, ...prev])
+      if (solde && form.type === "ANNUEL") {
+        setSolde(prev => prev ? { ...prev, pris: prev.pris + c.nbJours, restant: prev.restant - c.nbJours } : prev)
+      }
       setForm({ type: "", dateDebut: "", dateFin: "", motif: "" })
       setShowForm(false)
       toast.success("Demande soumise — en attente de validation RH")
     } else {
-      const e = await res.json().catch(() => ({}))
-      toast.error(e.message ?? "Erreur lors de la soumission")
+      const err = await res.json().catch(() => ({}))
+      toast.error(err.message ?? "Erreur lors de la soumission")
     }
     setSaving(false)
   }
@@ -81,6 +99,13 @@ export default function MesCongesPage() {
     refuses:   conges.filter(c => c.statut === "REFUSE").length,
   }
 
+  const soldeColor = !solde ? "#64748b"
+    : solde.restant <= 0 ? "#ef4444"
+    : solde.restant <= 5 ? "#f97316"
+    : "#10b981"
+
+  const soldePct = solde ? Math.min(100, Math.round((solde.pris / solde.annuel) * 100)) : 0
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
@@ -95,6 +120,43 @@ export default function MesCongesPage() {
           Nouvelle demande
         </button>
       </div>
+
+      {/* Solde congés annuels */}
+      {solde && (
+        <div className="rounded-2xl border p-5" style={{ borderColor: soldeColor + "40", background: soldeColor + "08" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: soldeColor + "20" }}>
+                <Umbrella className="h-4.5 w-4.5" style={{ color: soldeColor }} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Solde congés annuels {new Date().getFullYear()}</p>
+                <p className="text-2xl font-black mt-0.5" style={{ color: soldeColor }}>
+                  {solde.restant} jour{solde.restant > 1 ? "s" : ""} restant{solde.restant > 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-400">{solde.pris}j pris</p>
+              <p className="text-xs text-slate-400">sur {solde.annuel}j accordés</p>
+            </div>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${soldePct}%`, backgroundColor: soldeColor }} />
+          </div>
+          {solde.restant <= 5 && solde.restant > 0 && (
+            <p className="text-xs mt-2 font-medium" style={{ color: soldeColor }}>
+              ⚠ Plus que {solde.restant} jour(s) disponible(s) cette année
+            </p>
+          )}
+          {solde.restant <= 0 && (
+            <p className="text-xs mt-2 font-medium text-red-600">
+              ✗ Solde épuisé — toute nouvelle demande sera hors solde
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -112,7 +174,7 @@ export default function MesCongesPage() {
       </div>
 
       {/* Formulaire */}
-      <div className={`transition-all duration-300 overflow-hidden ${showForm ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}>
+      <div className={`transition-all duration-300 overflow-hidden ${showForm ? "max-h-[540px] opacity-100" : "max-h-0 opacity-0"}`}>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5">
           <h2 className="font-semibold text-slate-900 text-sm mb-4">Nouvelle demande de congé</h2>
           <form onSubmit={soumettre} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -134,8 +196,20 @@ export default function MesCongesPage() {
               <Input type="date" value={form.dateFin} min={form.dateDebut} onChange={e => setForm(p => ({ ...p, dateFin: e.target.value }))} required />
             </div>
             {nbJoursPrev > 0 && (
-              <div className="col-span-2 text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                Durée : <strong>{nbJoursPrev} jour(s)</strong>
+              <div className="col-span-2 space-y-1">
+                <p className="text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  Durée : <strong>{nbJoursPrev} jour(s)</strong>
+                </p>
+                {soldeApresDeduction !== null && (
+                  <p className={`text-xs font-medium px-3 py-2 rounded-lg border ${
+                    soldeApresDeduction < 0
+                      ? "bg-red-50 border-red-200 text-red-700"
+                      : "bg-blue-50 border-blue-200 text-blue-700"
+                  }`}>
+                    Solde après validation : <strong>{soldeApresDeduction}j</strong>
+                    {soldeApresDeduction < 0 && " — dépassement de solde"}
+                  </p>
+                )}
               </div>
             )}
             <div className="space-y-1.5 col-span-2">

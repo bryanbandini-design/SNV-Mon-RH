@@ -10,10 +10,22 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get("date")
   const employeId = searchParams.get("employeId")
+  const manuel = searchParams.get("manuel") // "pending" pour les saisies manuelles en attente
 
   const where: Record<string, unknown> = {}
-  if (date) where.date = new Date(date)
+  if (date) {
+    const start = new Date(date + "T00:00:00")
+    const end   = new Date(date + "T00:00:00")
+    end.setDate(end.getDate() + 1)
+    where.date = { gte: start, lt: end }
+  }
   if (employeId) where.employeId = employeId
+  if (manuel === "pending") {
+    where.saisieManuelle = true
+    where.statutValidation = "EN_ATTENTE"
+  } else if (manuel === "all") {
+    where.saisieManuelle = true
+  }
 
   const presences = await prisma.presence.findMany({
     where,
@@ -47,6 +59,8 @@ export async function POST(req: Request) {
 
   const statut = data.statut ?? (minutesRetard > 0 ? "RETARD" : "PRESENT")
 
+  const isManuel = data.saisieManuelle === true
+
   const presence = await prisma.presence.create({
     data: {
       employeId: data.employeId,
@@ -57,6 +71,10 @@ export async function POST(req: Request) {
       minutesRetard,
       statut,
       notes: data.notes || null,
+      saisieManuelle: isManuel,
+      statutValidation: isManuel ? "EN_ATTENTE" : "VALIDEE",
+      saisieParNom: data.saisieParNom || null,
+      motifManuel: data.motifManuel || null,
     },
   })
 
