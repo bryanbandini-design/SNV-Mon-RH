@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { QrCode, Users, Clock, CheckCircle, AlertCircle, Plus, Download, RefreshCw, Trash2, Fingerprint, Wifi, WifiOff } from "lucide-react"
+import { QrCode, Users, Clock, CheckCircle, AlertCircle, Plus, Download, RefreshCw, Trash2, Fingerprint, Wifi, WifiOff, Timer, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import { QRCodeCanvas as QRCode } from "qrcode.react"
 
 interface Pointage {
@@ -45,6 +45,18 @@ interface Atelier {
   couleur: string
 }
 
+interface PresenceManuelle {
+  id: string
+  date: string
+  heureArrivee: string | null
+  heureDepart:  string | null
+  statut: string
+  statutValidation: string
+  notes: string | null
+  saisieParNom: string | null
+  employe: { prenom: string; nom: string; matricule: string; poste: string }
+}
+
 const STATUT_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   EN_ATTENTE: { label: "En attente", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
   CONFIRME:   { label: "Confirmé",   color: "#22c55e", bg: "rgba(34,197,94,0.1)"  },
@@ -54,7 +66,10 @@ const STATUT_LABELS: Record<string, { label: string; color: string; bg: string }
 }
 
 export default function PointagePage() {
-  const [tab, setTab] = useState<"live" | "historique" | "ateliers" | "qr" | "zkteco">("live")
+  const [tab, setTab] = useState<"live" | "historique" | "ateliers" | "qr" | "zkteco" | "manuel">("live")
+  const [presencesManuelles, setPresencesManuelles] = useState<PresenceManuelle[]>([])
+  const [presLoading, setPresLoading]   = useState(false)
+  const [validating, setValidating]     = useState<string | null>(null)
   const [pointages, setPointages] = useState<Pointage[]>([])
   const [ateliers, setAteliers]   = useState<Atelier[]>([])
   const [loading, setLoading]     = useState(true)
@@ -107,8 +122,27 @@ export default function PointagePage() {
     }
   }, [])
 
+  const fetchPresencesManuelles = useCallback(async () => {
+    setPresLoading(true)
+    const res = await fetch("/api/presences?manuel=all")
+    if (res.ok) setPresencesManuelles(await res.json())
+    setPresLoading(false)
+  }, [])
+
+  async function validerPresence(id: string, action: "VALIDER" | "REJETER") {
+    setValidating(id)
+    await fetch(`/api/presences/${id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ action }),
+    })
+    await fetchPresencesManuelles()
+    setValidating(null)
+  }
+
   useEffect(() => { fetchPointages(); fetchAteliers() }, [fetchPointages, fetchAteliers])
   useEffect(() => { if (tab === "zkteco") fetchZkData() }, [tab, fetchZkData])
+  useEffect(() => { if (tab === "manuel") fetchPresencesManuelles() }, [tab, fetchPresencesManuelles])
   useEffect(() => { if (baseUrl) setZkServerUrl(baseUrl) }, [baseUrl])
 
   async function addAtelier() {
@@ -207,19 +241,25 @@ export default function PointagePage() {
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto w-full sm:w-fit">
         {[
           { key: "live",       label: "Vue live" },
+          { key: "manuel",     label: "Pointages employés", icon: <Timer size={13} />, badge: presencesManuelles.filter(p => p.statutValidation === "EN_ATTENTE").length },
           { key: "historique", label: "Historique" },
           { key: "ateliers",   label: "Ateliers" },
           { key: "qr",         label: "QR Codes" },
           { key: "zkteco",     label: "Empreinte ZKTeco", icon: <Fingerprint size={13} /> },
         ].map(t => (
           <button key={t.key}
-            onClick={() => setTab(t.key as "live" | "historique" | "ateliers" | "qr" | "zkteco")}
+            onClick={() => setTab(t.key as "live" | "historique" | "ateliers" | "qr" | "zkteco" | "manuel")}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
             style={tab === t.key
               ? { background: "white", color: "#0f172a", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }
               : { color: "#64748b" }}>
             {t.icon ?? null}
             {t.label}
+            {"badge" in t && (t as { badge: number }).badge > 0 && (
+              <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center leading-none">
+                {(t as { badge: number }).badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -559,6 +599,117 @@ export default function PointagePage() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* ── Pointages manuels employés ── */}
+      {tab === "manuel" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              Pointages saisis par les employés depuis leur espace personnel — à valider ou rejeter.
+            </p>
+            <button onClick={fetchPresencesManuelles}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+              <RefreshCw size={13} /> Actualiser
+            </button>
+          </div>
+
+          {presLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            </div>
+          ) : presencesManuelles.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm text-center py-14">
+              <Timer className="h-10 w-10 mx-auto mb-3 text-slate-200" />
+              <p className="text-sm text-slate-400">Aucun pointage employé enregistré</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              {/* En attente */}
+              {presencesManuelles.filter(p => p.statutValidation === "EN_ATTENTE").length > 0 && (
+                <>
+                  <div className="px-5 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                    <p className="text-sm font-semibold text-amber-700">
+                      En attente de validation ({presencesManuelles.filter(p => p.statutValidation === "EN_ATTENTE").length})
+                    </p>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {presencesManuelles.filter(p => p.statutValidation === "EN_ATTENTE").map(p => (
+                      <div key={p.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {p.employe.prenom[0]}{p.employe.nom[0]}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900">{p.employe.prenom} {p.employe.nom}</p>
+                            <p className="text-xs text-slate-400">{p.employe.poste} · {p.employe.matricule}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 capitalize">
+                              {new Date(p.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                              {" · "}
+                              <span className="font-mono">{p.heureArrivee ?? "--:--"} → {p.heureDepart ?? "--:--"}</span>
+                            </p>
+                            {p.notes && <p className="text-xs text-slate-400 italic mt-0.5">{p.notes}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          <button
+                            onClick={() => validerPresence(p.id, "VALIDER")}
+                            disabled={validating === p.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50">
+                            {validating === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            Valider
+                          </button>
+                          <button
+                            onClick={() => validerPresence(p.id, "REJETER")}
+                            disabled={validating === p.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-100 transition-colors disabled:opacity-50">
+                            {validating === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                            Rejeter
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Historique validés/rejetés */}
+              {presencesManuelles.filter(p => p.statutValidation !== "EN_ATTENTE").length > 0 && (
+                <>
+                  <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Traités</p>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {presencesManuelles.filter(p => p.statutValidation !== "EN_ATTENTE").map(p => (
+                      <div key={p.id} className="flex items-center justify-between px-5 py-3.5">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold flex-shrink-0">
+                            {p.employe.prenom[0]}{p.employe.nom[0]}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-700">{p.employe.prenom} {p.employe.nom}</p>
+                            <p className="text-xs text-slate-400 font-mono">
+                              {new Date(p.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                              {" · "}{p.heureArrivee ?? "--:--"} → {p.heureDepart ?? "--:--"}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                          p.statutValidation === "VALIDEE"
+                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                            : "bg-red-50 text-red-500 border border-red-200"
+                        }`}>
+                          {p.statutValidation === "VALIDEE" ? "Validé" : "Rejeté"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -14,8 +14,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (data.action === "VALIDER" || data.action === "REJETER") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const role = (session.user as any)?.role
-    if (role !== "ADMIN") {
-      return NextResponse.json({ message: "Réservé à l'administrateur" }, { status: 403 })
+    if (!["ADMIN", "RH", "RESPONSABLE"].includes(role)) {
+      return NextResponse.json({ message: "Réservé au responsable ou à l'administrateur" }, { status: 403 })
     }
     const presence = await prisma.presence.update({
       where: { id },
