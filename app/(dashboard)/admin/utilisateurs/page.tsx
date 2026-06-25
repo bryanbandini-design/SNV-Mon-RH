@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import {
   Users, Plus, Pencil, Trash2, ShieldCheck,
   Loader2, X, Eye, EyeOff, AlertCircle, Check,
-  UserCog, KeyRound, Mail, Search,
+  UserCog, KeyRound, Search,
 } from "lucide-react"
 import { PERM_GROUPS, PERM_LABELS, DEFAULT_PERMISSIONS } from "@/lib/permissions"
 import type { PermKey } from "@/lib/permissions"
@@ -278,16 +278,11 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
           {/* Identifiant */}
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-1.5">
-              <span className="inline-flex items-center gap-1">
-                <Mail className="h-3 w-3" /> Identifiant <span className="text-red-400">*</span>
-              </span>
+              Identifiant de connexion <span className="text-red-400">*</span>
             </label>
             <input type="text" value={email} onChange={e => setEmail(e.target.value)} required
-              placeholder="nom_utilisateur  ou  email@domaine.cm"
+              placeholder="ex : j.dupont"
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            <p className="text-[11px] text-slate-400 mt-1">
-              Sans @, le système crée un identifiant interne (ex : <em>jmbarga</em>). Avec @, un vrai email est utilisé.
-            </p>
           </div>
 
           {/* Mot de passe */}
