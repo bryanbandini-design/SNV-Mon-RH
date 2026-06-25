@@ -64,114 +64,135 @@ function StarDisplay({ value }: { value: number }) {
   )
 }
 
+async function loadImgB64(url: string): Promise<string> {
+  const blob = await fetch(url).then(r => r.blob())
+  return new Promise((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(blob)
+  })
+}
+
 async function exportPDF(ev: Evaluation) {
   const { jsPDF } = await import("jspdf")
   const autoTable  = (await import("jspdf-autotable")).default
 
   const doc    = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const purple = [124, 58, 237] as [number, number, number]
-  const dark   = [15, 23, 42]   as [number, number, number]
-  const grey   = [100, 116, 139] as [number, number, number]
+  const w      = doc.internal.pageSize.getWidth()
+  const pageH  = doc.internal.pageSize.getHeight()
+  const NAVY   = [26,  52,  97] as [number, number, number]
+  const GREEN  = [122,179,  46] as [number, number, number]
+  const BLUE   = [30, 139, 192] as [number, number, number]
+  const SLATE  = [51,  65,  85] as [number, number, number]
+  const GREY   = [100,116, 139] as [number, number, number]
   const st     = scoreColor(ev.scoreGlobal)
+  const m      = 14
 
-  // Header
-  doc.setFillColor(...purple)
-  doc.rect(0, 0, 210, 45, "F")
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(20); doc.setFont("helvetica", "bold")
-  doc.text("RAPPORT D'ÉVALUATION", 14, 16)
-  doc.setFontSize(11); doc.setFont("helvetica", "normal")
-  doc.text(`${TYPES_EVAL[ev.typeEvaluation] ?? ev.typeEvaluation} · ${ev.periode}`, 14, 25)
-  doc.setFontSize(9)
-  doc.text(`${ev.employe.prenom} ${ev.employe.nom} — ${ev.employe.poste} — ${ev.employe.matricule}`, 14, 33)
-  doc.text(`Évalué le ${new Date(ev.dateEval).toLocaleDateString("fr-FR")} par ${ev.evaluateur}`, 14, 40)
+  // ── Logo ──────────────────────────────────────────────────────────────────
+  try {
+    const b64 = await loadImgB64("/logo-sanovia.png")
+    doc.addImage(b64, "PNG", m, 7, 55, 13.4)
+  } catch {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14)
+    doc.setTextColor(...NAVY); doc.text("SANOVIA HEALTH CARE", m, 16)
+  }
+  doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.line(0, 26, w, 26)
 
-  // Score global
-  doc.setFillColor(248, 250, 252)
-  doc.roundedRect(14, 52, 90, 22, 3, 3, "F")
-  doc.setTextColor(...dark)
-  doc.setFontSize(9); doc.setFont("helvetica", "normal")
-  doc.text("SCORE GLOBAL", 18, 60)
-  doc.setFontSize(18); doc.setFont("helvetica", "bold")
-  doc.setTextColor(...(st.color.match(/\d+/g)?.map(Number) as [number,number,number] ?? dark))
-  doc.text(`${ev.scoreGlobal.toFixed(2)} / 5`, 18, 70)
+  // ── Titre ─────────────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+  doc.text("RAPPORT D'ÉVALUATION", m, 36)
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GREY)
+  doc.text(`${TYPES_EVAL[ev.typeEvaluation] ?? ev.typeEvaluation}  ·  ${ev.periode}`, m, 42)
+  doc.text(`${ev.employe.prenom} ${ev.employe.nom}  —  ${ev.employe.poste}  —  ${ev.employe.matricule}`, m, 48)
+  doc.text(`Évalué le ${new Date(ev.dateEval).toLocaleDateString("fr-FR")} par ${ev.evaluateur}`, m, 54)
+
+  // ── Score global ──────────────────────────────────────────────────────────
+  doc.setFillColor(242, 248, 230)
+  doc.roundedRect(m, 60, 86, 20, 3, 3, "F")
+  doc.setTextColor(...GREY); doc.setFontSize(8); doc.setFont("helvetica", "normal")
+  doc.text("SCORE GLOBAL", m + 4, 68)
+  doc.setFontSize(17); doc.setFont("helvetica", "bold")
+  doc.setTextColor(...(st.color.match(/\d+/g)?.map(Number) as [number,number,number] ?? NAVY))
+  doc.text(`${ev.scoreGlobal.toFixed(2)} / 5`, m + 4, 77)
 
   if (ev.recommandation && RECOMMANDATIONS[ev.recommandation]) {
-    doc.setFillColor(248, 250, 252)
-    doc.roundedRect(110, 52, 86, 22, 3, 3, "F")
-    doc.setTextColor(...grey)
-    doc.setFontSize(9); doc.setFont("helvetica", "normal")
-    doc.text("RECOMMANDATION", 114, 60)
-    doc.setFontSize(11); doc.setFont("helvetica", "bold")
-    doc.setTextColor(...dark)
-    doc.text(RECOMMANDATIONS[ev.recommandation].label, 114, 70)
+    doc.setFillColor(232, 244, 251)
+    doc.roundedRect(106, 60, 90, 20, 3, 3, "F")
+    doc.setTextColor(...GREY); doc.setFontSize(8); doc.setFont("helvetica", "normal")
+    doc.text("RECOMMANDATION", 110, 68)
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...NAVY)
+    doc.text(RECOMMANDATIONS[ev.recommandation].label, 110, 77)
   }
 
-  // Notes par critère
+  // ── Notes par critère ─────────────────────────────────────────────────────
   autoTable(doc, {
-    startY: 82,
+    startY: 88,
     head:   [["Critère", "Note", "Appréciation", "Commentaire"]],
     body:   ev.notes.map(n => {
       const critere = CRITERES_EVALUATION.find(c => c.id === n.critere)
       return [critere?.label ?? n.critere, `${n.note}/5`, NOTES_LABELS[n.note] ?? "", n.commentaire ?? ""]
     }),
-    headStyles:   { fillColor: purple, textColor: 255, fontStyle: "bold", fontSize: 9 },
-    bodyStyles:   { fontSize: 9, textColor: dark },
-    columnStyles: { 1: { halign: "center", cellWidth: 18 }, 2: { cellWidth: 28 } },
+    headStyles:         { fillColor: NAVY, textColor: 255, fontStyle: "bold", fontSize: 9 },
+    bodyStyles:         { fontSize: 9, textColor: SLATE },
+    columnStyles:       { 1: { halign: "center", cellWidth: 18 }, 2: { cellWidth: 28 } },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 14, right: 14 },
+    margin: { left: m, right: m },
   })
 
   let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
 
-  // Objectifs
+  // ── Objectifs ─────────────────────────────────────────────────────────────
   if (ev.objectifs.length > 0) {
-    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...dark)
-    doc.text("Objectifs de la période", 14, y); y += 5
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...NAVY)
+    doc.text("Objectifs de la période", m, y); y += 5
     autoTable(doc, {
       startY: y,
       head:   [["Objectif", "Résultat"]],
       body:   ev.objectifs.map(o => [o.titre, ATTEINT_CFG[o.atteint]?.label ?? o.atteint]),
-      headStyles: { fillColor: [99, 102, 241], textColor: 255, fontSize: 9 },
-      bodyStyles: { fontSize: 9, textColor: dark },
-      margin: { left: 14, right: 14 },
+      headStyles: { fillColor: BLUE, textColor: 255, fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: SLATE },
+      margin: { left: m, right: m },
     })
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
   }
 
-  // Actions
+  // ── Actions ───────────────────────────────────────────────────────────────
   if (ev.actions.length > 0) {
-    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...dark)
-    doc.text("Plan de développement", 14, y); y += 5
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(...NAVY)
+    doc.text("Plan de développement", m, y); y += 5
     autoTable(doc, {
       startY: y,
       head:   [["Action", "Type", "Échéance", "Statut"]],
       body:   ev.actions.map(a => [a.titre, a.type, a.echeance ? new Date(a.echeance).toLocaleDateString("fr-FR") : "—", a.statut]),
-      headStyles: { fillColor: [16, 185, 129], textColor: 255, fontSize: 9 },
-      bodyStyles: { fontSize: 9, textColor: dark },
-      margin: { left: 14, right: 14 },
+      headStyles: { fillColor: GREEN, textColor: 255, fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: SLATE },
+      margin: { left: m, right: m },
     })
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
   }
 
-  // Commentaire
+  // ── Commentaire ───────────────────────────────────────────────────────────
   if (ev.commentaire) {
-    doc.setFillColor(245, 243, 255)
-    doc.roundedRect(14, y, 182, 20, 3, 3, "F")
-    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...purple)
-    doc.text("Commentaire général", 18, y + 6)
-    doc.setFont("helvetica", "italic"); doc.setTextColor(...dark)
-    const lines = doc.splitTextToSize(ev.commentaire, 174) as string[]
-    doc.text(lines.slice(0, 2), 18, y + 13)
+    doc.setFillColor(232, 244, 251)
+    doc.setDrawColor(...BLUE); doc.setLineWidth(0.4)
+    doc.roundedRect(m, y, w - m * 2, 20, 2, 2, "FD")
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...BLUE)
+    doc.text("Commentaire général", m + 4, y + 6)
+    doc.setFont("helvetica", "italic"); doc.setTextColor(...SLATE)
+    const lines = doc.splitTextToSize(ev.commentaire, w - m * 2 - 8) as string[]
+    doc.text(lines.slice(0, 2), m + 4, y + 13)
     y += 28
   }
 
-  // Footer
-  doc.setFillColor(248, 250, 252)
-  doc.rect(0, 277, 210, 20, "F")
-  doc.setTextColor(...grey); doc.setFontSize(7); doc.setFont("helvetica", "normal")
-  doc.text("Document généré automatiquement — Mon RH", 105, 285, { align: "center" })
-  doc.text(`Émis le ${new Date().toLocaleDateString("fr-FR")}`, 105, 290, { align: "center" })
+  // ── Pied de page SANOVIA ──────────────────────────────────────────────────
+  const footH = 18
+  doc.setFillColor(...NAVY)
+  doc.rect(0, pageH - footH, w, footH, "F")
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255)
+  doc.text("SANOVIA Health Care", w / 2, pageH - footH + 5, { align: "center" })
+  doc.setFont("helvetica", "normal"); doc.setFontSize(6.8)
+  doc.text("Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   Société à responsabilité limitée",
+    w / 2, pageH - footH + 10, { align: "center" })
+  doc.text("NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707",
+    w / 2, pageH - footH + 15, { align: "center" })
 
   doc.save(`evaluation-${ev.employe.nom}-${ev.periode.replace(/\s/g, "-")}.pdf`)
 }

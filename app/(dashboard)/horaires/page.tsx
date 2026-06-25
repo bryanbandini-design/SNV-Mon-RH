@@ -436,14 +436,32 @@ export default function HorairesPage() {
     const { default: autoTable } = await import("jspdf-autotable")
     const doc  = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
     const days = getWeekDates(semaineOffset)
+    const w    = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    const NAVY  = [26, 52, 97]   as [number,number,number]
+    const GREEN = [122, 179, 46] as [number,number,number]
+    const SLATE = [51, 65, 85]   as [number,number,number]
+    const GREY  = [100, 116, 139] as [number,number,number]
+    const m = 14
 
-    doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42)
-    doc.text("Planning hebdomadaire", 14, 18)
-    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139)
-    doc.text(`Semaine : ${weekLabel}`, 14, 26)
-    doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`, 14, 32)
-    doc.setDrawColor(226, 232, 240)
-    doc.line(14, 36, 283, 36)
+    // Logo
+    try {
+      const blob = await fetch("/logo-sanovia.png").then(r => r.blob())
+      const b64: string = await new Promise((res, rej) => {
+        const rd = new FileReader(); rd.onload = () => res(rd.result as string); rd.onerror = rej; rd.readAsDataURL(blob)
+      })
+      doc.addImage(b64, "PNG", m, 7, 55, 13.4)
+    } catch {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+      doc.text("SANOVIA HEALTH CARE", m, 16)
+    }
+    doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.line(0, 26, w, 26)
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+    doc.text("PLANNING HEBDOMADAIRE", m, 36)
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GREY)
+    doc.text(`Semaine : ${weekLabel}`, m, 43)
+    doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`, m, 49)
 
     const headers = ["Shift", ...days.map((d, i) => `${JOURS[i]} ${d.getDate()}/${d.getMonth() + 1}`)]
     const rows = shifts.map(shift => {
@@ -456,14 +474,23 @@ export default function HorairesPage() {
     })
 
     autoTable(doc, {
-      startY: 41, head: [headers], body: rows,
-      headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9, halign: "center" },
-      bodyStyles: { fontSize: 8, textColor: [30, 41, 59], halign: "center", valign: "middle" },
+      startY: 55, head: [headers], body: rows,
+      headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: "bold", fontSize: 9, halign: "center" },
+      bodyStyles: { fontSize: 8, textColor: SLATE, halign: "center", valign: "middle" },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: { 0: { halign: "left", fontStyle: "bold", cellWidth: 32 } },
       styles: { cellPadding: 3, overflow: "linebreak" },
-      margin: { left: 14, right: 14 },
+      margin: { left: m, right: m },
     })
+
+    // Pied de page SANOVIA
+    const footH = 15
+    doc.setFillColor(...NAVY); doc.rect(0, pageH - footH, w, footH, "F")
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255,255,255)
+    doc.text("SANOVIA Health Care", w / 2, pageH - footH + 5, { align: "center" })
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5)
+    doc.text("Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707",
+      w / 2, pageH - footH + 11, { align: "center" })
 
     const from = days[0].toISOString().split("T")[0]
     const to   = days[6].toISOString().split("T")[0]
@@ -477,16 +504,35 @@ export default function HorairesPage() {
     if (data.length === 0) { toast.error("Aucune affectation à exporter"); return }
     const { jsPDF } = await import("jspdf")
     const { default: autoTable } = await import("jspdf-autotable")
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const doc   = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const w     = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    const NAVY  = [26, 52, 97]   as [number,number,number]
+    const GREEN = [122, 179, 46] as [number,number,number]
+    const SLATE = [51, 65, 85]   as [number,number,number]
+    const GREY  = [100, 116, 139] as [number,number,number]
+    const m = 14
 
-    doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42)
-    doc.text("Composition des équipes", 14, 22)
-    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139)
+    // Logo
+    try {
+      const blob = await fetch("/logo-sanovia.png").then(r => r.blob())
+      const b64: string = await new Promise((res, rej) => {
+        const rd = new FileReader(); rd.onload = () => res(rd.result as string); rd.onerror = rej; rd.readAsDataURL(blob)
+      })
+      doc.addImage(b64, "PNG", m, 7, 55, 13.4)
+    } catch {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+      doc.text("SANOVIA HEALTH CARE", m, 16)
+    }
+    doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.line(0, 26, w, 26)
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+    doc.text("COMPOSITION DES ÉQUIPES", m, 36)
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GREY)
     const fromLabel = new Date(equipesPeriode.dateDebut + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
     const toLabel   = new Date(equipesPeriode.dateFin   + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
-    doc.text(`Période : du ${fromLabel} au ${toLabel}`, 14, 31)
-    doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`, 14, 37)
-    doc.setDrawColor(226, 232, 240); doc.line(14, 42, 196, 42)
+    doc.text(`Période : du ${fromLabel} au ${toLabel}`, m, 43)
+    doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`, m, 49)
 
     const rows = shifts.map(shift => {
       const membres = data.filter(a => a.shiftId === shift.id)
@@ -495,16 +541,27 @@ export default function HorairesPage() {
     })
 
     autoTable(doc, {
-      startY: 47,
+      startY: 55,
       head: [["Shift", "Horaires", "Effectif", "Membres"]],
       body: rows,
-      headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10 },
-      bodyStyles: { fontSize: 9, textColor: [30, 41, 59] },
+      headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: "bold", fontSize: 10 },
+      bodyStyles: { fontSize: 9, textColor: SLATE },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: { 0: { fontStyle: "bold", cellWidth: 38 }, 1: { cellWidth: 28, halign: "center" }, 2: { cellWidth: 18, halign: "center" } },
       styles: { cellPadding: 4, overflow: "linebreak" },
-      margin: { left: 14, right: 14 },
+      margin: { left: m, right: m },
     })
+
+    // Pied de page SANOVIA
+    const footH = 18
+    doc.setFillColor(...NAVY); doc.rect(0, pageH - footH, w, footH, "F")
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255,255,255)
+    doc.text("SANOVIA Health Care", w / 2, pageH - footH + 5, { align: "center" })
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.8)
+    doc.text("Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   Société à responsabilité limitée",
+      w / 2, pageH - footH + 10, { align: "center" })
+    doc.text("NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707",
+      w / 2, pageH - footH + 15, { align: "center" })
 
     doc.save(`equipes-${equipesPeriode.dateDebut}-${equipesPeriode.dateFin}.pdf`)
     toast.success("Planning téléchargé")
