@@ -292,8 +292,8 @@ export default function SalairesPage() {
       </div>
 
       {/* ── Formulaire avance ── */}
-      <div className={`transition-all duration-300 overflow-hidden ${showAvanceForm ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-6">
+      <div className={`transition-all duration-300 overflow-hidden ${showAvanceForm ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}`}>
+        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-amber-500" />
@@ -303,27 +303,29 @@ export default function SalairesPage() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <form onSubmit={handleAvanceSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <form onSubmit={handleAvanceSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600">Employé *</Label>
               <Select value={avanceForm.employeId} onValueChange={v => setAvanceForm(p => ({ ...p, employeId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Sélectionner un employé" /></SelectTrigger>
                 <SelectContent>{employes.filter(e => e.statut === "ACTIF").map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600">Montant (FCFA) *</Label>
-              <Input type="number" value={avanceForm.montant} onChange={e => setAvanceForm(p => ({ ...p, montant: e.target.value }))} min="0" step="1000" required />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600">Montant (FCFA) *</Label>
+                <Input type="number" value={avanceForm.montant} onChange={e => setAvanceForm(p => ({ ...p, montant: e.target.value }))} min="0" step="1000" required placeholder="0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600">Date</Label>
+                <Input type="date" value={avanceForm.date} onChange={e => setAvanceForm(p => ({ ...p, date: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600">Motif</Label>
+                <Input value={avanceForm.motif} onChange={e => setAvanceForm(p => ({ ...p, motif: e.target.value }))} placeholder="Raison..." />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600">Date</Label>
-              <Input type="date" value={avanceForm.date} onChange={e => setAvanceForm(p => ({ ...p, date: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600">Motif</Label>
-              <Input value={avanceForm.motif} onChange={e => setAvanceForm(p => ({ ...p, motif: e.target.value }))} placeholder="Raison..." />
-            </div>
-            <div className="col-span-4 flex justify-end gap-3">
+            <div className="flex justify-end gap-3 pt-1">
               <button type="button" onClick={() => setShowAvanceForm(false)} className="px-4 py-2 rounded-lg text-sm text-slate-600 border border-slate-200 bg-white">Annuler</button>
               <button type="submit" disabled={avanceSaving || !avanceForm.employeId || !avanceForm.montant}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
@@ -390,8 +392,8 @@ export default function SalairesPage() {
       )}
 
       {/* Formulaire création / édition */}
-      <div className={`transition-all duration-300 overflow-hidden ${showForm ? "max-h-[700px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-6">
+      <div className={`transition-all duration-300 overflow-hidden ${showForm ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"}`}>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-emerald-500" />
@@ -401,8 +403,8 @@ export default function SalairesPage() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <div className="space-y-1.5 col-span-3">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-1.5 col-span-full">
               <Label className="text-xs font-medium text-slate-600">Employé *</Label>
               <Select value={form.employeId} onValueChange={handleEmployeChange} disabled={!!editId}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner un employé" /></SelectTrigger>
@@ -451,7 +453,7 @@ export default function SalairesPage() {
               </Select>
             </div>
             {avancesEnAttentePourEmploye.length > 0 && (
-              <div className="col-span-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
+              <div className="col-span-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
                 <p className="font-semibold text-amber-800 mb-1">Avances à déduire automatiquement</p>
                 {avancesEnAttentePourEmploye.map(a => (
                   <p key={a.id} className="text-amber-700">— {a.montant.toLocaleString("fr-FR")} FCFA {a.motif ? `(${a.motif})` : ""}</p>
@@ -459,12 +461,12 @@ export default function SalairesPage() {
                 <p className="text-amber-600 mt-1 font-medium">Total : {avancesEnAttentePourEmploye.reduce((s, a) => s + a.montant, 0).toLocaleString("fr-FR")} FCFA</p>
               </div>
             )}
-            <div className="space-y-1.5 col-span-3">
+            <div className="space-y-1.5 col-span-full">
               <Label className="text-xs font-medium text-slate-600">Notes</Label>
               <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Observations..." />
             </div>
             {previewCalc && (
-              <div className="col-span-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs space-y-1">
+              <div className="col-span-full rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs space-y-1">
                 <p className="font-semibold text-blue-800 mb-2 text-sm">Simulation — Droit camerounais (CNPS · IRPP · CAC · RAV)</p>
                 {([
                   { label: "Salaire brut imposable", val: previewCalc.brutImposable, cls: "text-slate-800 font-medium" },
@@ -492,7 +494,7 @@ export default function SalairesPage() {
                 </div>
               </div>
             )}
-            <div className="col-span-3 flex justify-end gap-3">
+            <div className="col-span-full flex justify-end gap-3">
               <button type="button" onClick={cancelForm} className="px-4 py-2 rounded-lg text-sm text-slate-600 border border-slate-200 bg-white hover:bg-slate-50">Annuler</button>
               <button type="submit" disabled={loading || !form.employeId || !form.salaireBase}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"

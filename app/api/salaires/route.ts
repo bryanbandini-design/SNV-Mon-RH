@@ -71,6 +71,23 @@ export async function POST(req: Request) {
   }
 
   const moisLabel = MOIS[salaire.mois - 1] ?? `Mois ${salaire.mois}`
+
+  // Notifier l'employé que son bulletin est disponible
+  const employeUser = await prisma.employe.findUnique({
+    where:  { id: data.employeId },
+    select: { utilisateur: { select: { id: true } } },
+  })
+  if (employeUser?.utilisateur) {
+    await prisma.notification.create({
+      data: {
+        userId:  employeUser.utilisateur.id,
+        type:    "BULLETIN_DISPONIBLE",
+        titre:   "Bulletin de salaire disponible",
+        message: `Votre bulletin de salaire ${moisLabel} ${salaire.annee} est disponible — Net à payer : ${Math.round(calcul.netAPayer).toLocaleString("fr-FR")} FCFA.`,
+      },
+    })
+  }
+
   await logActivity({
     session,
     action:      "CREATE",

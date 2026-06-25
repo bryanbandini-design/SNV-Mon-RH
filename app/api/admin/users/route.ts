@@ -54,8 +54,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Rôle invalide" }, { status: 400 })
   }
 
+  // EMPLOYE doit obligatoirement être lié à un employé
   if (role === "EMPLOYE" && !employeId) {
-    return NextResponse.json({ message: "Un employé doit être sélectionné pour ce rôle" }, { status: 400 })
+    return NextResponse.json({ message: "Un employé doit être sélectionné pour le rôle Employé" }, { status: 400 })
   }
 
   if (password.length < 8) {
@@ -63,12 +64,13 @@ export async function POST(req: Request) {
   }
 
   const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing) return NextResponse.json({ message: "Cet email est déjà utilisé" }, { status: 409 })
+  if (existing) return NextResponse.json({ message: "Cet identifiant est déjà utilisé" }, { status: 409 })
 
   const permissions: PermKey[] = Array.isArray(rawPerms) ? rawPerms : (DEFAULT_PERMISSIONS[role] ?? [])
   const permissionsJson = JSON.stringify(permissions)
 
-  if (role === "EMPLOYE" && employeId) {
+  // Si un employeId est fourni (quel que soit le rôle), on vérifie et on lie
+  if (employeId) {
     const employe = await prisma.employe.findUnique({
       where: { id: employeId },
       include: { utilisateur: { select: { id: true } } },
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
         email,
         passwordHash: hash,
         name: name || `${employe.prenom} ${employe.nom}`,
-        role: "EMPLOYE",
+        role,
         permissions: permissionsJson,
         employeId,
       },

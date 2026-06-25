@@ -639,7 +639,7 @@ export default function HorairesPage() {
             </button>
           </div>
 
-          <div className={`transition-all duration-300 overflow-hidden ${showPresenceForm ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}>
+          <div className={`transition-all duration-300 overflow-hidden ${showPresenceForm ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"}`}>
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/30 p-5">
               <form onSubmit={ajouterPresence} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1.5">
@@ -1332,7 +1332,7 @@ export default function HorairesPage() {
                   <Label className="text-xs font-medium text-slate-600">Heure de fin *</Label>
                   <Input type="time" value={formShift.heureFin} onChange={e => setFormShift(p => ({ ...p, heureFin: e.target.value }))} required />
                 </div>
-                <div className="space-y-1.5 col-span-2">
+                <div className="space-y-1.5 col-span-full">
                   <Label className="text-xs font-medium text-slate-600">Couleur</Label>
                   <div className="flex gap-2">
                     {COULEURS.map(c => (
@@ -1342,7 +1342,7 @@ export default function HorairesPage() {
                     ))}
                   </div>
                 </div>
-                <div className="col-span-2 flex justify-end gap-3">
+                <div className="col-span-full flex justify-end gap-3">
                   <button type="button" onClick={() => setShowShiftForm(false)}
                     className="px-4 py-2 rounded-lg text-sm text-slate-600 border border-slate-200 bg-white hover:bg-slate-50">Annuler</button>
                   <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "#6366f1" }}>Créer</button>

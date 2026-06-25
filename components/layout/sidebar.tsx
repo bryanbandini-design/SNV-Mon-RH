@@ -140,7 +140,8 @@ function NotificationPanel({ notifs, onClose, onMarkAll }: {
         </div>
       </div>
       {/* List */}
-      <div className="overflow-y-auto flex-1">
+      <div className="overflow-y-auto flex-1"
+        style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}>
         {notifs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
             <Bell className="h-8 w-8 text-slate-700" />
@@ -204,6 +205,21 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
   useEffect(() => { if (pathname.startsWith("/disciplinaire")) setDiscOpen(true) }, [pathname])
   useEffect(() => { onMobileClose?.(); setPendingHref(null) }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Prevent background scroll while mobile sidebar is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden"
+      document.body.style.touchAction = "none"
+    } else {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+  }, [mobileOpen])
+
   const loadNotifs = useCallback(() => {
     fetch("/api/notifications").then(r => r.ok ? r.json() : [])
       .then(d => { if (Array.isArray(d)) setNotifs(d) }).catch(() => {})
@@ -240,9 +256,13 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Mobile backdrop — touch-action:none empêche le scroll du fond */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={onMobileClose} />
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          onClick={onMobileClose}
+          style={{ touchAction: "none" }}
+        />
       )}
 
       <aside
@@ -254,9 +274,10 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
         style={{
           width: "var(--sidebar-w)",
           background: "#080d1a",
-          height: "100dvh",           /* dvh = tient compte de la barre Safari */
+          height: "100dvh",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
+        onTouchMove={e => e.stopPropagation()}
       >
         {/* Accent line gauche */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px]"
@@ -285,7 +306,10 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
         <div className="mx-5 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
         {/* ── Navigation ────────────────────────────────────────────────── */}
-        <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-5">
+        <nav
+          className="flex-1 px-3 py-3 overflow-y-auto space-y-5"
+          style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+        >
           {NAV_SECTIONS.map(section => (
             <div key={section.label}>
               <p className="text-[10px] font-bold tracking-[0.16em] uppercase px-3 pb-2"

@@ -10,7 +10,7 @@ import { PERM_GROUPS, PERM_LABELS, DEFAULT_PERMISSIONS } from "@/lib/permissions
 import type { PermKey } from "@/lib/permissions"
 
 type Employe = { prenom: string; nom: string; poste: string; departement: string | null; statut: string }
-type EmployeOption = { id: string; prenom: string; nom: string; poste: string | null; userRole: string | null }
+type EmployeOption = { id: string; prenom: string; nom: string; poste: string | null; userRole: string | null; statut: string }
 type User = {
   id:          string
   email:       string
@@ -70,6 +70,15 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
     return DEFAULT_PERMISSIONS[user?.role ?? "RH"] ?? []
   })()
 
+  useEffect(() => {
+    document.body.style.overflow = "hidden"
+    document.body.style.touchAction = "none"
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+  }, [])
+
   const [name,        setName]        = useState(user?.name ?? "")
   const [email,       setEmail]       = useState(user ? displayId(user.email) : "")
   const [role,        setRole]        = useState(user?.role ?? "RH")
@@ -105,13 +114,19 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
   }
 
   useEffect(() => {
-    if (role === "EMPLOYE" && !isEdit) {
+    if (!isEdit) {
       setLoadingEmp(true)
       fetch("/api/employes")
         .then(r => r.json())
         .then((data: EmployeOption[]) => {
           const list: EmployeOption[] = Array.isArray(data) ? data : []
-          setEmployes(list.filter((e: EmployeOption) => !e.userRole))
+          // Pour EMPLOYE : seulement ceux sans compte
+          // Pour autres rôles : tous les actifs (pour lier optionnellement)
+          if (role === "EMPLOYE") {
+            setEmployes(list.filter((e: EmployeOption) => !e.userRole))
+          } else {
+            setEmployes(list.filter((e: EmployeOption) => e.statut === "ACTIF"))
+          }
         })
         .catch(() => setEmployes([]))
         .finally(() => setLoadingEmp(false))
@@ -126,7 +141,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
       const body: Record<string, any> = { email, role, permissions }
       if (name) body.name = name
       if (password) body.password = password
-      if (role === "EMPLOYE" && employeId) body.employeId = employeId
+      if (employeId) body.employeId = employeId  // transmis pour tous les rôles
 
       const res = isEdit
         ? await fetch(`/api/admin/users/${user!.id}`, {
@@ -154,8 +169,10 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
   const selectedEmploye = employes.find(e => e.id === employeId)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      style={{ touchAction: "none" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col"
+        onTouchMove={e => e.stopPropagation()}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
@@ -176,7 +193,8 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
         </div>
 
         {/* Form — scrollable */}
-        <form onSubmit={submit} className="overflow-y-auto flex-1 p-6 space-y-5">
+        <form onSubmit={submit} className="overflow-y-auto flex-1 p-6 space-y-5"
+          style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}>
           {error && (
             <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5">
               <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
@@ -196,29 +214,37 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
             </select>
           </div>
 
-          {/* Sélecteur d'employé */}
-          {role === "EMPLOYE" && !isEdit && (
+          {/* Sélecteur d'employé — obligatoire pour EMPLOYE, optionnel pour les autres */}
+          {!isEdit && (
             <div>
               <label className="text-xs font-medium text-slate-600 block mb-1.5">
-                Employé à lier <span className="text-red-400">*</span>
+                {role === "EMPLOYE"
+                  ? <>Employé à lier <span className="text-red-400">*</span></>
+                  : "Lier à une fiche employé (optionnel)"}
               </label>
               {loadingEmp ? (
                 <div className="flex items-center gap-2 text-slate-400 text-sm py-2">
                   <Loader2 className="h-4 w-4 animate-spin" /> Chargement…
                 </div>
-              ) : employes.length === 0 ? (
+              ) : role === "EMPLOYE" && employes.length === 0 ? (
                 <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-700">
                   Tous les employés ont déjà un compte, ou aucun employé trouvé.
                 </div>
               ) : (
-                <select value={employeId} onChange={e => {
-                    setEmployeId(e.target.value)
-                    const emp = employes.find(emp => emp.id === e.target.value)
+                <select
+                  value={employeId}
+                  onChange={e => {
+                    const val = e.target.value
+                    setEmployeId(val)
+                    const emp = employes.find(emp => emp.id === val)
                     if (emp) setName(`${emp.prenom} ${emp.nom}`)
+                    else if (!val) setName("")
                   }}
-                  required
+                  required={role === "EMPLOYE"}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
-                  <option value="">— Sélectionner un employé —</option>
+                  <option value="">
+                    {role === "EMPLOYE" ? "— Sélectionner un employé —" : "— Aucun (saisie manuelle) —"}
+                  </option>
                   {employes.map(emp => (
                     <option key={emp.id} value={emp.id}>
                       {emp.prenom} {emp.nom}{emp.poste ? ` — ${emp.poste}` : ""}
@@ -231,11 +257,16 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
                   ✓ Compte lié à : {selectedEmploye.prenom} {selectedEmploye.nom}
                 </p>
               )}
+              {role !== "EMPLOYE" && !employeId && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Sélectionnez un employé existant ou laissez vide pour saisir le nom manuellement.
+                </p>
+              )}
             </div>
           )}
 
-          {/* Nom */}
-          {role !== "EMPLOYE" && (
+          {/* Nom — visible pour non-EMPLOYE sans fiche employé liée, ou en mode édition */}
+          {(isEdit ? role !== "EMPLOYE" : (role !== "EMPLOYE" && !employeId)) && (
             <div>
               <label className="text-xs font-medium text-slate-600 block mb-1.5">Nom complet <span className="text-red-400">*</span></label>
               <input value={name} onChange={e => setName(e.target.value)} required
@@ -371,6 +402,15 @@ function DeleteConfirm({ user, onClose, onDeleted }: { user: User; onClose: () =
   const [deleting, setDeleting] = useState(false)
   const [error,    setError]    = useState<string | null>(null)
 
+  useEffect(() => {
+    document.body.style.overflow = "hidden"
+    document.body.style.touchAction = "none"
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+  }, [])
+
   async function confirm() {
     setDeleting(true); setError(null)
     const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" })
@@ -379,8 +419,10 @@ function DeleteConfirm({ user, onClose, onDeleted }: { user: User; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      style={{ touchAction: "none" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5"
+        onTouchMove={e => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
             <Trash2 className="h-5 w-5 text-red-500" />
@@ -425,6 +467,15 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
   const [error,   setError]   = useState<string | null>(null)
   const [done,    setDone]    = useState(false)
 
+  useEffect(() => {
+    document.body.style.overflow = "hidden"
+    document.body.style.touchAction = "none"
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+  }, [])
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (pwd !== confirm) { setError("Les mots de passe ne correspondent pas"); return }
@@ -440,8 +491,10 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      style={{ touchAction: "none" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5"
+        onTouchMove={e => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
             <KeyRound className="h-5 w-5 text-amber-500" />

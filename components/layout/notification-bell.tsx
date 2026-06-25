@@ -19,16 +19,17 @@ type Notif = {
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
-  DEMANDE_INITIE:  { icon: User,          color: "#f59e0b", bg: "#fffbeb" },
-  DOCUMENT_PRET:   { icon: FileText,      color: "#3b82f6", bg: "#eff6ff" },
-  ENVOYE_EMPLOYE:  { icon: Send,          color: "#6366f1", bg: "#eef2ff" },
-  REPONSE_RECUE:   { icon: MessageCircle, color: "#10b981", bg: "#ecfdf5" },
-  SANCTION_AUTO:   { icon: AlertTriangle, color: "#ef4444", bg: "#fef2f2" },
-  DELAI_DEPASSE:   { icon: Clock,         color: "#f97316", bg: "#fff7ed" },
+  DEMANDE_INITIE:      { icon: User,          color: "#f59e0b", bg: "#fffbeb" },
+  DOCUMENT_PRET:       { icon: FileText,      color: "#3b82f6", bg: "#eff6ff" },
+  ENVOYE_EMPLOYE:      { icon: Send,          color: "#6366f1", bg: "#eef2ff" },
+  REPONSE_RECUE:       { icon: MessageCircle, color: "#10b981", bg: "#ecfdf5" },
+  SANCTION_AUTO:       { icon: AlertTriangle, color: "#ef4444", bg: "#fef2f2" },
+  DELAI_DEPASSE:       { icon: Clock,         color: "#f97316", bg: "#fff7ed" },
   CONGE_APPROUVE:      { icon: CalendarCheck, color: "#10b981", bg: "#ecfdf5" },
   CONGE_REFUSE:        { icon: XCircle,       color: "#ef4444", bg: "#fef2f2" },
   PLANNING_MAJ:        { icon: CalendarCheck, color: "#6366f1", bg: "#eef2ff" },
   EVALUATION_PUBLIEE:  { icon: Star,          color: "#a855f7", bg: "#faf5ff" },
+  BULLETIN_DISPONIBLE: { icon: FileText,      color: "#0ea5e9", bg: "#f0f9ff" },
 }
 
 // Maps each notification type → URL to navigate to on click
@@ -42,11 +43,12 @@ function getHref(n: Notif): string | null {
     case "SANCTION_AUTO":   return "/disciplinaire/procedures"
     case "DELAI_DEPASSE":   return "/disciplinaire/dossiers"
     // ── Employé ───────────────────────────────────
-    case "CONGE_APPROUVE":  return "/mon-espace/conges"
-    case "CONGE_REFUSE":    return "/mon-espace/conges"
-    case "PLANNING_MAJ":       return "/mon-espace/planning"
-    case "EVALUATION_PUBLIEE": return "/mon-espace/evaluations"
-    default:                   return null
+    case "CONGE_APPROUVE":      return "/mon-espace/conges"
+    case "CONGE_REFUSE":        return "/mon-espace/conges"
+    case "PLANNING_MAJ":        return "/mon-espace/planning"
+    case "EVALUATION_PUBLIEE":  return "/mon-espace/evaluations"
+    case "BULLETIN_DISPONIBLE": return "/mon-espace/salaires"
+    default:                    return null
   }
 }
 
@@ -149,9 +151,9 @@ export function NotificationBell({ theme = "dark" }: { theme?: "dark" | "light" 
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — fixed (plein écran) sur mobile, absolu sur sm+ */}
       {open && (
-        <div className="absolute right-0 top-10 w-96 rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 z-50 overflow-hidden">
+        <div className="fixed right-2 left-2 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-10 sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 z-[60] overflow-hidden">
 
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100">
@@ -185,7 +187,8 @@ export function NotificationBell({ theme = "dark" }: { theme?: "dark" | "light" 
           </div>
 
           {/* List */}
-          <div className="overflow-y-auto max-h-[420px]">
+          <div className="overflow-y-auto max-h-[60vh]"
+            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}>
             {notifs.length === 0 ? (
               <div className="text-center py-12">
                 <Bell className="h-10 w-10 mx-auto mb-3 text-slate-200" />

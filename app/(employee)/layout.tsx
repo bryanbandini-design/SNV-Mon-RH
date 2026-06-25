@@ -30,16 +30,33 @@ function EmployeeSidebar({ open, onClose, employe }: {
 
   useEffect(() => { onClose() }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden"
+      document.body.style.touchAction = "none"
+    } else {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+  }, [open])
+
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden" onClick={onClose} />
+        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          onClick={onClose}
+          style={{ touchAction: "none" }} />
       )}
       <aside className={cn(
         "fixed left-0 top-0 w-64 bg-gradient-to-b from-emerald-900 to-emerald-800 flex flex-col z-50 transition-transform duration-300 ease-in-out",
         open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}
         style={{ height: "100dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
+        onTouchMove={e => e.stopPropagation()}
       >
         {/* Logo */}
         <div className="px-5 py-5 border-b border-emerald-700/50 flex items-center justify-between">
@@ -72,7 +89,8 @@ function EmployeeSidebar({ open, onClose, employe }: {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto"
+          style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}>
           {NAV.map(item => {
             const active = pathname === item.href
             return (

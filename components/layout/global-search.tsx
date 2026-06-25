@@ -30,8 +30,19 @@ export function GlobalSearch() {
   }, [])
 
   useEffect(() => {
-    if (open) { setTimeout(() => inputRef.current?.focus(), 50) }
-    else { setQuery(""); setResults([]) }
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 50)
+      document.body.style.overflow = "hidden"
+      document.body.style.touchAction = "none"
+    } else {
+      setQuery(""); setResults([])
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
   }, [open])
 
   const search = useCallback((q: string) => {
@@ -84,12 +95,13 @@ export function GlobalSearch() {
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
-          style={{ background: "rgba(15,23,42,0.5)", backdropFilter: "blur(4px)" }}
+          style={{ background: "rgba(15,23,42,0.5)", backdropFilter: "blur(4px)", touchAction: "none" }}
           onClick={e => { if (e.target === e.currentTarget) setOpen(false) }}
         >
           <div
             className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl"
             style={{ background: "#fff", border: "1px solid #e2e8f0" }}
+            onTouchMove={e => e.stopPropagation()}
           >
             {/* Input */}
             <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100">

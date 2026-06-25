@@ -4,12 +4,10 @@ import { useState } from "react"
 import { FileText, Loader2, ChevronDown } from "lucide-react"
 
 // ── Palette SANOVIA ──────────────────────────────────────────────────────────
-const NAVY  = [26,  52,  97] as [number,number,number]
-const GREEN = [122,179,  46] as [number,number,number]
-const BLUE  = [30, 139, 192] as [number,number,number]
-const GRAY  = [100,116, 139] as [number,number,number]
-const SLATE = [51,  65,  85] as [number,number,number]
-const WHITE = 255
+const NAVY  : [number,number,number] = [26,  52,  97]
+const GREEN : [number,number,number] = [122, 179,  46]
+const GRAY  : [number,number,number] = [100, 116, 139]
+const SLATE : [number,number,number] = [51,   65,  85]
 
 async function loadImageAsBase64(url: string): Promise<string> {
   const res  = await fetch(url)
@@ -22,6 +20,16 @@ async function loadImageAsBase64(url: string): Promise<string> {
   })
 }
 
+// Formate un montant sans espace unicode ( ) que jsPDF affiche mal
+function montant(n: number): string {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")
+}
+
+// Hauteur d'une ligne en mm pour une taille de police donnée (pt)
+function lh(ptSize: number, factor = 1.45): number {
+  return (ptSize * factor) / 2.835
+}
+
 async function genererAttestation(employeId: string, type: "TRAVAIL" | "SALAIRE") {
   const res = await fetch(`/api/documents/attestation?employeId=${employeId}&type=${type}`)
   if (!res.ok) return
@@ -30,131 +38,216 @@ async function genererAttestation(employeId: string, type: "TRAVAIL" | "SALAIRE"
   const { default: jsPDF } = await import("jspdf")
 
   const doc  = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const w    = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const m    = 20
-
-  // ── Logo SANOVIA ──────────────────────────────────────────────────────────
-  try {
-    const b64 = await loadImageAsBase64("/logo-sanovia.png")
-    doc.addImage(b64, "PNG", m, 7, 55, 13.4)
-  } catch {
-    doc.setFont("helvetica", "bold"); doc.setFontSize(14)
-    doc.setTextColor(...NAVY); doc.text("SANOVIA HEALTH CARE", m, 16)
-  }
-
-  // Ligne séparatrice verte sous le logo
-  doc.setDrawColor(...GREEN); doc.setLineWidth(0.8)
-  doc.line(0, 26, w, 26)
-
-  // ── Titre du document ─────────────────────────────────────────────────────
-  const titre = type === "TRAVAIL" ? "ATTESTATION DE TRAVAIL" : "ATTESTATION DE SALAIRE"
-  doc.setFont("helvetica", "bold"); doc.setFontSize(15)
-  doc.setTextColor(...NAVY)
-  const tw = doc.getTextWidth(titre)
-  doc.text(titre, (w - tw) / 2, 42)
-
-  // Ligne décorative verte sous le titre
-  doc.setDrawColor(...NAVY); doc.setLineWidth(0.5)
-  doc.line((w - tw) / 2, 45, (w + tw) / 2, 45)
-
-  // ── Corps du document ─────────────────────────────────────────────────────
-  doc.setFont("helvetica", "normal"); doc.setFontSize(11)
-  doc.setTextColor(...SLATE)
+  const W    = doc.internal.pageSize.getWidth()   // 210 mm
+  const H    = doc.internal.pageSize.getHeight()  // 297 mm
+  const ML   = 22   // marge gauche
+  const MR   = 22   // marge droite
+  const TW   = W - ML - MR  // largeur utile = 166 mm
 
   const { employe, entreprise, dateEdition } = data
-  const dirigeant = entreprise.dirigeant || "La Direction"
+  const dirigeant = (entreprise.dirigeant || "La Direction") as string
 
+  // ── LOGO ──────────────────────────────────────────────────────────────────
+  try {
+    const b64 = await loadImageAsBase64("/logo-sanovia.png")
+    doc.addImage(b64, "PNG", ML, 8, 50, 12.2)
+  } catch {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(13)
+    doc.setTextColor(...NAVY)
+    doc.text("SANOVIA HEALTH CARE", ML, 18)
+  }
+
+  // Filet vert sous le logo
+  doc.setDrawColor(...GREEN)
+  doc.setLineWidth(0.8)
+  doc.line(0, 27, W, 27)
+
+  // ── TITRE ─────────────────────────────────────────────────────────────────
+  const titre = type === "TRAVAIL" ? "ATTESTATION DE TRAVAIL" : "ATTESTATION DE SALAIRE"
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(14)
+  doc.setTextColor(...NAVY)
+  const tw  = doc.getTextWidth(titre)
+  const tX  = (W - tw) / 2
+  doc.text(titre, tX, 44)
+  // Soulignement
+  doc.setDrawColor(...NAVY)
+  doc.setLineWidth(0.45)
+  doc.line(tX, 47, tX + tw, 47)
+
+  // ── CORPS ─────────────────────────────────────────────────────────────────
+  // Rendu ligne par ligne avec align "left" pour éviter toute justification jsPDF
   let y = 60
-  const ligne = (txt: string, bold = false) => {
-    doc.setFont("helvetica", bold ? "bold" : "normal")
-    const lines = doc.splitTextToSize(txt, w - m * 2)
-    doc.text(lines, m, y)
-    y += lines.length * 7
+  const FS = 10.5  // taille corps
+
+  function write(
+    txt: string,
+    options: { bold?: boolean; italic?: boolean; color?: [number,number,number]; size?: number } = {}
+  ) {
+    const sz  = options.size ?? FS
+    const col = options.color ?? SLATE
+    doc.setFont("helvetica", options.bold ? "bold" : options.italic ? "italic" : "normal")
+    doc.setFontSize(sz)
+    doc.setTextColor(...col)
+    const lines = doc.splitTextToSize(txt, TW) as string[]
+    lines.forEach(line => {
+      doc.text(line, ML, y, { align: "left" })
+      y += lh(sz)
+    })
   }
-  const saut = (h = 5) => { y += h }
 
-  ligne(`Je soussigné(e), ${dirigeant}, représentant légal de la société ${entreprise.nom},`)
-  saut()
-  ligne(`atteste par la présente que :`)
-  saut(3)
+  const skip = (mm = 5) => { y += mm }
 
-  // Bloc info salarié encadré
-  doc.setFillColor(242, 248, 230)  // vert très pâle
-  doc.setDrawColor(...GREEN); doc.setLineWidth(0.4)
-  doc.roundedRect(m, y - 3, w - m * 2, type === "TRAVAIL" ? 32 : 26, 2, 2, "FD")
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...NAVY)
-  doc.text(`${employe.prenom.toUpperCase()} ${employe.nom.toUpperCase()}`, m + 4, y + 5)
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...SLATE)
-  doc.text(`Matricule : ${employe.matricule}`, m + 4, y + 12)
-  doc.text(`Poste : ${employe.poste}${employe.departement ? `  —  ${employe.departement}` : ""}`, m + 4, y + 19)
-  doc.text(`Contrat : ${employe.typeContrat}  |  Depuis le : ${employe.dateEmbauche}`, m + 4, y + 26)
+  write(`Je soussigné(e), ${dirigeant}, représentant légal de la société ${entreprise.nom},`)
+  skip(3)
+  write("atteste par la présente que :")
+  skip(6)
+
+  // ── BLOC EMPLOYÉ ──────────────────────────────────────────────────────────
+  const FS_BOX  = 9.5
+  const LH_BOX  = lh(FS_BOX)
+  const PAD     = 5   // padding interne (mm)
+
+  const posteLabel = `Poste : ${employe.poste}${employe.departement ? `  —  ${employe.departement}` : ""}`
+  const contratLabel = `Contrat : ${employe.typeContrat}   |   Depuis le : ${employe.dateEmbauche}`
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(FS_BOX)
+  const posteLines   = doc.splitTextToSize(posteLabel,   TW - PAD * 2) as string[]
+  const contratLines = doc.splitTextToSize(contratLabel, TW - PAD * 2) as string[]
+
+  // Hauteur dynamique de la boîte
+  const rowsInBox = 1              // nom
+    + 1                            // matricule
+    + posteLines.length
+    + contratLines.length
+    + (type === "TRAVAIL" ? 1 : 0) // ancienneté
+  const boxH = PAD + LH_BOX * 1.6 + LH_BOX * (rowsInBox - 1) + PAD + 1
+
+  doc.setFillColor(243, 249, 231)
+  doc.setDrawColor(...GREEN)
+  doc.setLineWidth(0.4)
+  doc.roundedRect(ML, y, TW, boxH, 2, 2, "FD")
+
+  let by = y + PAD + LH_BOX
+
+  // Nom (gras, navy)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(FS_BOX + 0.5)
+  doc.setTextColor(...NAVY)
+  doc.text(`${employe.prenom.toUpperCase()} ${employe.nom.toUpperCase()}`, ML + PAD, by, { align: "left" })
+  by += LH_BOX * 1.4
+
+  // Matricule
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(FS_BOX)
+  doc.setTextColor(...SLATE)
+  doc.text(`Matricule : ${employe.matricule}`, ML + PAD, by, { align: "left" })
+  by += LH_BOX
+
+  // Poste (peut passer sur plusieurs lignes)
+  posteLines.forEach(line => {
+    doc.text(line, ML + PAD, by, { align: "left" })
+    by += LH_BOX
+  })
+
+  // Contrat
+  contratLines.forEach(line => {
+    doc.text(line, ML + PAD, by, { align: "left" })
+    by += LH_BOX
+  })
+
+  // Ancienneté (seulement attestation de travail)
   if (type === "TRAVAIL") {
-    doc.text(`Ancienneté : ${employe.anciennete}`, m + 4, y + 33)
-    y += 40
-  } else {
-    y += 33
+    doc.text(`Ancienneté : ${employe.anciennete}`, ML + PAD, by, { align: "left" })
   }
-  saut(8)
 
-  doc.setFontSize(11); doc.setTextColor(...SLATE)
+  y += boxH + 8
+
+  // ── PARAGRAPHES MÉTIER ────────────────────────────────────────────────────
   if (type === "TRAVAIL") {
-    ligne(`est employé(e) au sein de notre organisation en qualité de ${employe.poste}${employe.departement ? `, département ${employe.departement}` : ""}, dans le cadre d'un contrat de type ${employe.typeContrat}.`)
-    saut()
-    ligne(`À la date d'émission du présent document, l'intéressé(e) est toujours en poste.`)
+    write(
+      `est employé(e) au sein de notre organisation en qualité de ${employe.poste}` +
+      `${employe.departement ? `, département ${employe.departement}` : ""}` +
+      `, dans le cadre d'un contrat de type ${employe.typeContrat}.`
+    )
+    skip(5)
+    write("À la date d'émission du présent document, l'intéressé(e) est toujours en poste.")
   } else {
-    const brut = employe.salaireBase.toLocaleString("fr-FR") + " FCFA"
-    ligne(`perçoit un salaire brut mensuel de base de ${brut}.`)
-    saut()
+    write(`perçoit un salaire brut mensuel de base de ${montant(employe.salaireBase)} FCFA.`)
     if (employe.derSalaire) {
-      const netP = employe.derSalaire.netAPayer.toLocaleString("fr-FR") + " FCFA"
-      ligne(`Son dernier salaire net perçu (${employe.derSalaire.mois} ${employe.derSalaire.annee}) s'élève à ${netP}.`)
+      skip(5)
+      write(
+        `Son dernier salaire net perçu (${employe.derSalaire.mois} ${employe.derSalaire.annee})` +
+        ` s'élève à ${montant(employe.derSalaire.netAPayer)} FCFA.`
+      )
     }
   }
 
-  saut(10)
-  doc.setFont("helvetica", "italic"); doc.setFontSize(11); doc.setTextColor(...SLATE)
-  ligne("La présente attestation est délivrée à l'intéressé(e) pour faire valoir ce que de droit.")
+  skip(8)
+  write("La présente attestation est délivrée à l'intéressé(e) pour faire valoir ce que de droit.", { italic: true })
 
-  // ── Signature ─────────────────────────────────────────────────────────────
-  saut(18)
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...GRAY)
-  doc.text(`Fait à __________, le ${dateEdition}`, m, y)
+  // ── ZONE SIGNATURE ────────────────────────────────────────────────────────
+  skip(20)
 
-  const sigX = w - m
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...NAVY)
-  const sigLabel = "Signature et cachet :"
-  doc.text(sigLabel, sigX - doc.getTextWidth(sigLabel), y)
-  y += 6
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...SLATE)
-  doc.text(dirigeant, sigX - doc.getTextWidth(dirigeant), y)
-  y += 4
-  doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.setTextColor(...GRAY)
-  doc.text("Représentant légal", sigX - doc.getTextWidth("Représentant légal"), y)
+  // Gauche : Fait à
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9.5)
+  doc.setTextColor(...GRAY)
+  doc.text(`Fait à _______________, le ${dateEdition}`, ML, y, { align: "left" })
 
-  // Ligne signature employeur
-  doc.setDrawColor(203,213,225); doc.setLineWidth(0.3)
-  doc.line(w / 2 + 4, y + 14, w - m, y + 14)
-  doc.setFontSize(8); doc.setTextColor(...GRAY)
-  doc.text("Date et signature", w / 2 + 4, y + 18)
+  // Droite : bloc signature
+  const SX = W - MR
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(9.5)
+  doc.setTextColor(...NAVY)
+  doc.text("Signature et cachet :", SX, y, { align: "right" })
 
-  // ── Pied de page SANOVIA ──────────────────────────────────────────────────
-  const footH = 18
+  y += lh(9.5) + 2
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9.5)
+  doc.setTextColor(...SLATE)
+  doc.text(dirigeant, SX, y, { align: "right" })
+
+  y += lh(9)
+  doc.setFont("helvetica", "italic")
+  doc.setFontSize(8.5)
+  doc.setTextColor(...GRAY)
+  doc.text("Représentant légal", SX, y, { align: "right" })
+
+  // Ligne pour la signature de l'employé
+  const lineY = y + 20
+  doc.setDrawColor(200, 213, 225)
+  doc.setLineWidth(0.3)
+  doc.line(W / 2 + 4, lineY, W - MR, lineY)
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(7.5)
+  doc.setTextColor(...GRAY)
+  doc.text("Date et signature", W / 2 + 4, lineY + 4, { align: "left" })
+
+  // ── PIED DE PAGE ──────────────────────────────────────────────────────────
+  const FOOT_H = 18
   doc.setFillColor(...NAVY)
-  doc.rect(0, pageH - footH, w, footH, "F")
-  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(WHITE, WHITE, WHITE)
-  doc.text("SANOVIA Health Care", w / 2, pageH - footH + 5, { align: "center" })
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6.8)
+  doc.rect(0, H - FOOT_H, W, FOOT_H, "F")
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(8)
+  doc.setTextColor(255, 255, 255)
+  doc.text("SANOVIA Health Care", W / 2, H - FOOT_H + 5.5, { align: "center" })
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(6.5)
   doc.text(
-    "Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   Société à responsabilité limitée",
-    w / 2, pageH - footH + 10, { align: "center" }
+    "Tel : 656 67 67 67  —  670 44 55 68   |   shcdg@sanoviahc.com   |   Societe a responsabilite limitee",
+    W / 2, H - FOOT_H + 10.5, { align: "center" }
   )
   doc.text(
     "NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707",
-    w / 2, pageH - footH + 15, { align: "center" }
+    W / 2, H - FOOT_H + 15, { align: "center" }
   )
 
-  const filename = `attestation_${type.toLowerCase()}_${employe.nom}_${employe.prenom}.pdf`
+  const filename = `attestation_${type.toLowerCase()}_${employe.nom.toLowerCase()}_${employe.prenom.toLowerCase()}.pdf`
   doc.save(filename)
 }
 

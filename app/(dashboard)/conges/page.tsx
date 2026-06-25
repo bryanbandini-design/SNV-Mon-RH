@@ -51,6 +51,20 @@ export default function CongesPage() {
   const [actionStatut, setActionStatut] = useState<"APPROUVE" | "REFUSE" | null>(null)
   const [commentaire,  setCommentaire]  = useState("")
 
+  useEffect(() => {
+    if (actionId) {
+      document.body.style.overflow = "hidden"
+      document.body.style.touchAction = "none"
+    } else {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.touchAction = ""
+    }
+  }, [actionId])
+
   // Sélection en masse
   const [selected, setSelected]       = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
@@ -264,7 +278,7 @@ export default function CongesPage() {
 
       {/* Formulaire nouvelle demande */}
       <div className={`transition-all duration-300 overflow-hidden ${showForm ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-6">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 sm:p-6">
           <h2 className="font-semibold text-slate-900 text-sm mb-4 flex items-center gap-2">
             <Calendar className="h-4 w-4 text-amber-500" />
             Nouvelle demande de congé
@@ -298,15 +312,15 @@ export default function CongesPage() {
               <Input type="date" value={form.dateFin} min={form.dateDebut} onChange={e => setForm(p => ({ ...p, dateFin: e.target.value }))} required />
             </div>
             {nbJoursPrev > 0 && (
-              <div className="col-span-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              <div className="col-span-full text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                 Durée : <strong>{nbJoursPrev} jour(s)</strong>
               </div>
             )}
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5 col-span-full">
               <Label className="text-xs font-medium text-slate-600">Motif</Label>
               <Textarea value={form.motif} onChange={e => setForm(p => ({ ...p, motif: e.target.value }))} rows={2} placeholder="Motif optionnel…" />
             </div>
-            <div className="col-span-2 flex justify-end gap-3">
+            <div className="col-span-full flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm text-slate-600 border border-slate-200 bg-white hover:bg-slate-50">Annuler</button>
               <button type="submit" disabled={loading || !form.employeId || !form.type || !form.dateDebut || !form.dateFin}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
@@ -321,7 +335,7 @@ export default function CongesPage() {
 
       {/* Filtres */}
       <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
-        <div className="col-span-2 flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+        <div className="col-span-full flex items-center gap-1.5 text-xs text-slate-500 font-medium">
           <Filter className="h-3.5 w-3.5" />
           Filtrer :
         </div>
@@ -348,7 +362,7 @@ export default function CongesPage() {
             <SelectItem value="REFUSE">Refusé</SelectItem>
           </SelectContent>
         </Select>
-        <div className="col-span-2 flex items-center justify-between">
+        <div className="col-span-full flex items-center justify-between">
           {hasFiltre && (
             <button onClick={() => { setFiltreEmp("TOUS"); setFiltreType("TOUS"); setFiltreStatut("TOUS") }}
               className="text-xs text-slate-400 hover:text-slate-700 underline">
@@ -361,8 +375,10 @@ export default function CongesPage() {
 
       {/* Modal commentaire individuel */}
       {actionId && actionStatut && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          style={{ touchAction: "none" }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md"
+            onTouchMove={e => e.stopPropagation()}>
             <h3 className="font-semibold text-slate-900 mb-1">
               {actionStatut === "APPROUVE" ? "✓ Approuver le congé" : "✗ Refuser le congé"}
             </h3>
