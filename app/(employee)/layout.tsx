@@ -1,25 +1,56 @@
 "use client"
 
-// Employee layout is a client component to handle mobile sidebar state
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { redirect } from "next/navigation"
-import { Menu, X, LayoutDashboard, User, DollarSign, Calendar, Clock, Star, FolderOpen, LogOut, Timer } from "lucide-react"
+import {
+  Menu, X, LayoutDashboard, User, DollarSign, Calendar, Clock,
+  Star, FolderOpen, LogOut, Timer, BarChart3,
+} from "lucide-react"
 import { signOut } from "next-auth/react"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { cn } from "@/lib/utils"
 
-const NAV = [
-  { href: "/mon-espace",             label: "Tableau de bord", icon: LayoutDashboard },
-  { href: "/mon-espace/profil",      label: "Mon profil",      icon: User            },
-  { href: "/mon-espace/salaires",    label: "Mes salaires",    icon: DollarSign      },
-  { href: "/mon-espace/conges",      label: "Mes congés",      icon: Calendar        },
-  { href: "/mon-espace/pointage",    label: "Mon pointage",    icon: Timer           },
-  { href: "/mon-espace/planning",    label: "Mon planning",    icon: Clock           },
-  { href: "/mon-espace/evaluations", label: "Mes évaluations", icon: Star            },
-  { href: "/mon-espace/documents",   label: "Mes documents",   icon: FolderOpen      },
+const NAV_SECTIONS = [
+  {
+    label: null,
+    items: [
+      { href: "/mon-espace", label: "Tableau de bord", icon: LayoutDashboard, exact: true,
+        iconColor: "text-sky-300",    activeColor: "bg-sky-400/20"    },
+    ],
+  },
+  {
+    label: "Temps & présence",
+    items: [
+      { href: "/mon-espace/pointage", label: "Mon pointage",  icon: Timer,     exact: false,
+        iconColor: "text-emerald-300", activeColor: "bg-emerald-400/20" },
+      { href: "/mon-espace/planning", label: "Mon planning",  icon: Calendar,  exact: false,
+        iconColor: "text-indigo-300",  activeColor: "bg-indigo-400/20"  },
+      { href: "/mon-espace/horaires", label: "Mes horaires",  icon: BarChart3, exact: false,
+        iconColor: "text-violet-300",  activeColor: "bg-violet-400/20"  },
+    ],
+  },
+  {
+    label: "Ma carrière",
+    items: [
+      { href: "/mon-espace/profil",      label: "Mon profil",      icon: User,     exact: false,
+        iconColor: "text-blue-300",   activeColor: "bg-blue-400/20"   },
+      { href: "/mon-espace/conges",      label: "Mes congés",      icon: Clock,    exact: false,
+        iconColor: "text-amber-300",  activeColor: "bg-amber-400/20"  },
+      { href: "/mon-espace/evaluations", label: "Mes évaluations", icon: Star,     exact: false,
+        iconColor: "text-purple-300", activeColor: "bg-purple-400/20" },
+    ],
+  },
+  {
+    label: "Administratif",
+    items: [
+      { href: "/mon-espace/salaires",  label: "Mes salaires",  icon: DollarSign, exact: false,
+        iconColor: "text-green-300",  activeColor: "bg-green-400/20"  },
+      { href: "/mon-espace/documents", label: "Mes documents", icon: FolderOpen, exact: false,
+        iconColor: "text-orange-300", activeColor: "bg-orange-400/20" },
+    ],
+  },
 ]
 
 function EmployeeSidebar({ open, onClose, employe }: {
@@ -48,23 +79,27 @@ function EmployeeSidebar({ open, onClose, employe }: {
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={onClose}
           style={{ touchAction: "none" }} />
       )}
       <aside className={cn(
-        "fixed left-0 top-0 w-64 bg-gradient-to-b from-emerald-900 to-emerald-800 flex flex-col z-50 transition-transform duration-300 ease-in-out",
+        "fixed left-0 top-0 w-64 flex flex-col z-50 transition-transform duration-300 ease-in-out",
         open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}
-        style={{ height: "100dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{
+          height: "100dvh",
+          paddingBottom: "env(safe-area-inset-bottom)",
+          background: "linear-gradient(170deg, #064e3b 0%, #065f46 45%, #047857 100%)",
+        }}
         onTouchMove={e => e.stopPropagation()}
       >
         {/* Logo */}
-        <div className="py-5 border-b border-emerald-700/50 flex items-center justify-center relative">
-          <button onClick={onClose} className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 text-emerald-300 hover:text-white transition-colors p-1">
-            <X className="h-5 w-5" />
+        <div className="pt-5 pb-4 flex items-center justify-center relative border-b border-white/10">
+          <button onClick={onClose}
+            className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 text-emerald-300 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
+            <X className="h-4 w-4" />
           </button>
-          {/* Cercle 80px, image 70px centrée : feuilles (~75px larges) tiennent dans le cercle */}
           <div style={{
             width: "80px", height: "80px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
             display: "flex", alignItems: "center",
@@ -76,50 +111,75 @@ function EmployeeSidebar({ open, onClose, employe }: {
           </div>
         </div>
 
-        {/* Avatar */}
-        <div className="px-5 py-5 border-b border-emerald-700/50">
+        {/* Avatar employé */}
+        <div className="px-4 py-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-white font-black text-base flex-shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center text-white font-black text-sm flex-shrink-0 shadow-inner">
               {employe?.prenom?.[0]}{employe?.nom?.[0]}
             </div>
             <div className="min-w-0">
-              <p className="text-white font-semibold text-sm truncate">{employe?.prenom} {employe?.nom}</p>
-              <p className="text-emerald-300 text-xs truncate">{employe?.poste}</p>
-              {employe?.departement && <p className="text-emerald-400 text-[10px] truncate">{employe.departement}</p>}
+              <p className="text-white font-bold text-sm truncate leading-tight">{employe?.prenom} {employe?.nom}</p>
+              <p className="text-emerald-300 text-xs truncate mt-0.5">{employe?.poste}</p>
+              {employe?.departement && (
+                <span className="inline-block text-[10px] text-emerald-400/80 bg-white/10 rounded-full px-2 py-0.5 mt-1">
+                  {employe.departement}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto"
+        {/* Navigation par sections */}
+        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-5"
           style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}>
-          {NAV.map(item => {
-            const active = pathname === item.href
-            return (
-              <Link key={item.href} href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
-                  active
-                    ? "bg-white/20 text-white"
-                    : "text-emerald-100 hover:bg-white/10 hover:text-white"
-                )}>
-                <item.icon className={cn(
-                  "h-4 w-4 flex-shrink-0 transition-colors",
-                  active ? "text-white" : "text-emerald-300 group-hover:text-white"
-                )} />
-                {item.label}
-              </Link>
-            )
-          })}
+          {NAV_SECTIONS.map((section, si) => (
+            <div key={si}>
+              {section.label && (
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-400/60 px-2 mb-2">
+                  {section.label}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map(item => {
+                  const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
+                  return (
+                    <Link key={item.href} href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group",
+                        active
+                          ? `${item.activeColor} text-white shadow-sm`
+                          : "text-emerald-100/80 hover:bg-white/10 hover:text-white"
+                      )}>
+                      <div className={cn(
+                        "h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all",
+                        active ? "bg-white/20" : "bg-white/5 group-hover:bg-white/10"
+                      )}>
+                        <item.icon className={cn(
+                          "h-3.5 w-3.5 transition-colors",
+                          active ? "text-white" : item.iconColor
+                        )} />
+                      </div>
+                      <span className="truncate">{item.label}</span>
+                      {active && (
+                        <div className="ml-auto h-1.5 w-1.5 rounded-full bg-white/70 flex-shrink-0" />
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        {/* Sign out */}
-        <div className="p-4 border-t border-emerald-700/50">
+        {/* Pied de sidebar */}
+        <div className="px-3 py-3 border-t border-white/10">
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-300 hover:bg-white/10 hover:text-white transition-all group"
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-emerald-300/80 hover:bg-white/10 hover:text-white transition-all group"
           >
-            <LogOut className="h-4 w-4 flex-shrink-0 group-hover:text-white transition-colors" />
+            <div className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/5 group-hover:bg-white/10 flex-shrink-0">
+              <LogOut className="h-3.5 w-3.5" />
+            </div>
             Déconnexion
           </button>
         </div>
@@ -188,7 +248,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
           </div>
         </header>
         <main className="flex-1 overflow-auto">
-          <div className="max-w-5xl mx-auto p-3 sm:p-4 lg:p-6" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>{children}</div>
+          <div className="max-w-5xl mx-auto p-3 sm:p-4 lg:p-6"
+            style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
+            {children}
+          </div>
         </main>
       </div>
     </div>
