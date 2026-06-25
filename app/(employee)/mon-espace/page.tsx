@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { formatCurrency, formatDate, MOIS } from "@/lib/utils"
-import { Calendar, DollarSign, Star, Clock, CheckCircle, XCircle, AlertCircle, ChevronRight, FolderOpen } from "lucide-react"
+import { Calendar, DollarSign, Star, Clock, CheckCircle, XCircle, AlertCircle, ChevronRight, FolderOpen, Bell, Megaphone } from "lucide-react"
 
 export default async function MonEspacePage() {
   const session = await auth()
@@ -36,6 +36,18 @@ export default async function MonEspacePage() {
   const nbDocuments = await prisma.document.count({
     where: { employeId, dossierDisciplinaireId: null },
   })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const userId = (session?.user as any)?.id as string | undefined
+
+  const [notifications, annonces] = await Promise.all([
+    userId ? prisma.notification.findMany({
+      where: { userId, lu: false },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }) : Promise.resolve([]),
+    prisma.annonce.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
+  ])
 
   const now = new Date()
   const diffMois = Math.floor((now.getTime() - new Date(employe.dateEmbauche).getTime()) / (1000 * 60 * 60 * 24 * 30))
@@ -231,6 +243,65 @@ export default async function MonEspacePage() {
                     c.statut === "APPROUVE" ? "bg-green-100 text-green-700" :
                     c.statut === "REFUSE"   ? "bg-red-100 text-red-700" :
                     "bg-amber-100 text-amber-700"}`}>{c.statut.replace("_", " ")}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Annonces ───────────────────────────── */}
+      {annonces.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-indigo-500" />
+            <p className="font-semibold text-slate-900 text-sm">Annonces de la direction</p>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {annonces.map(a => {
+              const typeStyle = a.type === "URGENT" ? { bg: "#fef2f2", border: "#fca5a5", text: "#dc2626" }
+                : a.type === "IMPORTANT" ? { bg: "#fffbeb", border: "#fcd34d", text: "#d97706" }
+                : { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" }
+              return (
+                <div key={a.id} className="px-6 py-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0"
+                      style={{ background: typeStyle.bg, borderColor: typeStyle.border, color: typeStyle.text }}>
+                      {a.type}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">{a.titre}</p>
+                      <p className="text-sm text-slate-600 mt-0.5 leading-relaxed">{a.contenu}</p>
+                      <p className="text-xs text-slate-400 mt-1.5">{a.auteur} · {new Date(a.createdAt).toLocaleDateString("fr-FR")}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Notifications non lues ─────────────── */}
+      {notifications.length > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-emerald-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-emerald-500" />
+              <p className="font-semibold text-slate-900 text-sm">Notifications</p>
+              <span className="h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ background: "#10b981" }}>
+                {notifications.length}
+              </span>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {notifications.map(n => (
+              <div key={n.id} className="flex items-start gap-3 px-6 py-3">
+                <div className="h-2 w-2 rounded-full mt-2 flex-shrink-0" style={{ background: "#10b981" }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">{n.titre}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{n.message}</p>
+                  <p className="text-xs text-slate-400 mt-1">{new Date(n.createdAt).toLocaleDateString("fr-FR")}</p>
                 </div>
               </div>
             ))}

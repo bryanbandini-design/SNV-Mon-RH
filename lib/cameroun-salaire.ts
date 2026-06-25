@@ -4,6 +4,13 @@
  */
 
 export const CAMEROUN = {
+  // Durée légale hebdomadaire (Code du Travail, art. 80)
+  HEURES_LEGALES_SEMAINE: 40,
+  // Taux HS (multiplicateurs du taux horaire brut)
+  HS_TAUX_NORMAL:   1.20,   // +20% — 8 premières heures sup/semaine
+  HS_TAUX_ELEVE:    1.50,   // +50% — heures sup au-delà de 8h/semaine
+  HS_TAUX_DIMANCHE: 1.75,   // +75% — dimanches et jours fériés
+
   // CNPS - Caisse Nationale de Prévoyance Sociale
   CNPS_PLAFOND_MENSUEL:   750_000,   // FCFA — plafond de cotisation mensuel
   CNPS_VIEILLESSE_SAL:    0.042,     // 4.2% salarié (Vieillesse-Invalidité-Décès)
@@ -33,8 +40,26 @@ export const CAMEROUN = {
   SMIG: 41_875,
 }
 
+export type TauxHS = "NORMAL" | "ELEVE" | "DIMANCHE"
+
+/**
+ * Calcule le montant brut des heures supplémentaires.
+ * @param salaireBase  Salaire de base mensuel (FCFA)
+ * @param nbHeures     Nombre d'heures sup à payer
+ * @param taux         Catégorie : NORMAL(+20%) | ELEVE(+50%) | DIMANCHE(+75%)
+ */
+export function calculerHS(salaireBase: number, nbHeures: number, taux: TauxHS = "NORMAL"): number {
+  const tauxHoraire = salaireBase / (CAMEROUN.HEURES_LEGALES_SEMAINE * 4.33)
+  const multiplicateur =
+    taux === "DIMANCHE" ? CAMEROUN.HS_TAUX_DIMANCHE :
+    taux === "ELEVE"    ? CAMEROUN.HS_TAUX_ELEVE    :
+                          CAMEROUN.HS_TAUX_NORMAL
+  return Math.round(tauxHoraire * nbHeures * multiplicateur)
+}
+
 export type DetailsSalaire = {
-  brutImposable: number    // Salaire de base + Primes
+  brutImposable: number    // Salaire de base + Primes + HS
+  montantHS:     number    // montant brut des heures sup
   cnpsSalarie:   number    // 4.2% du brut plafonné
   revenuNetImposable: number
   abattement:    number
@@ -52,16 +77,18 @@ export type DetailsSalaire = {
 
 /**
  * Calcule toutes les cotisations et le net à payer selon la loi camerounaise.
- * @param salaireBase   Salaire de base mensuel brut (FCFA)
- * @param primes        Total des primes imposables du mois
+ * @param salaireBase    Salaire de base mensuel brut (FCFA)
+ * @param primes         Total des primes imposables du mois
  * @param autresRetenues Retenues diverses (avances, absences…) — non soumises aux cotisations
+ * @param montantHS      Montant brut des heures supplémentaires (pré-calculé via calculerHS)
  */
 export function calculerSalaire(
   salaireBase: number,
   primes:      number,
-  autresRetenues: number
+  autresRetenues: number,
+  montantHS: number = 0,
 ): DetailsSalaire {
-  const brut = Math.round(salaireBase + primes)
+  const brut = Math.round(salaireBase + primes + montantHS)
 
   // ── CNPS salarié ────────────────────────────────────────────────────
   const baseCNPS    = Math.min(brut, CAMEROUN.CNPS_PLAFOND_MENSUEL)
@@ -101,6 +128,7 @@ export function calculerSalaire(
 
   return {
     brutImposable: brut,
+    montantHS: Math.round(montantHS),
     cnpsSalarie,
     revenuNetImposable,
     abattement,

@@ -27,6 +27,17 @@ export async function POST(req: Request) {
     data:  { statut, commentaire: commentaire || null },
   })
 
+  // Déduction automatique du solde pour congés annuels approuvés en masse
+  if (statut === "APPROUVE") {
+    const congesAnnuels = conges.filter(c => c.type === "ANNUEL")
+    for (const c of congesAnnuels) {
+      await prisma.employe.update({
+        where: { id: c.employeId },
+        data:  { soldeCongesAnnuels: { decrement: c.nbJours } },
+      })
+    }
+  }
+
   // Notifications employés
   const notifData = conges
     .filter(c => c.employe.utilisateur)

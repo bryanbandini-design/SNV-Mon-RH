@@ -7,10 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, DollarSign, Loader2, Check, TrendingUp, Clock,
   Pencil, Trash2, X, Filter, AlertCircle, FileDown, Printer,
+  CreditCard, Shield,
 } from "lucide-react"
 import { formatCurrency, MOIS } from "@/lib/utils"
 import { toast } from "sonner"
-import { calculerSalaire, CAMEROUN, formatFCFA, type DetailsSalaire } from "@/lib/cameroun-salaire"
+import { calculerSalaire, calculerHS, CAMEROUN, formatFCFA, type DetailsSalaire, type TauxHS } from "@/lib/cameroun-salaire"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 function downloadCSV(rows: (string | number)[][], filename: string) {
   const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
@@ -26,7 +29,12 @@ type Salaire = {
   id: string; mois: number; annee: number; salaireBase: number
   primes: number; retenues: number; netAPayer: number
   brutImposable: number; cnpsSalarie: number; irpp: number; cac: number; rav: number; cnpsPatronal: number
+  heuresSupplementaires: number; montantHS: number; avanceDeduite: number
   statut: string; datePaiement: string | null; notes: string | null
+  employe: { id: string; prenom: string; nom: string; matricule: string; poste: string }
+}
+type Avance = {
+  id: string; montant: number; date: string; motif: string | null; statut: string
   employe: { id: string; prenom: string; nom: string; matricule: string; poste: string }
 }
 
@@ -37,12 +45,19 @@ function initiales(e: { prenom: string; nom: string }) { return e.prenom[0] + e.
 const emptyForm = (currentMonth: number, currentYear: number) => ({
   employeId: "", mois: String(currentMonth), annee: String(currentYear),
   salaireBase: "", primes: "0", retenues: "0", notes: "",
+  heuresSupplementaires: "0", tauxHS: "NORMAL" as TauxHS,
 })
+const emptyAvanceForm = () => ({ employeId: "", montant: "", motif: "", date: new Date().toISOString().split("T")[0] })
 
 export default function SalairesPage() {
   const [salaires, setSalaires] = useState<Salaire[]>([])
   const [employes, setEmployes] = useState<Employe[]>([])
-  const [showForm, setShowForm] = useState(false)
+  const [avances,  setAvances]  = useState<Avance[]>([])
+  const [showForm, setShowForm]       = useState(false)
+  const [showAvanceForm, setShowAvanceForm] = useState(false)
+  const [avanceSaving, setAvanceSaving] = useState(false)
+  const [avanceForm, setAvanceForm]   = useState(emptyAvanceForm())
+  const [activeTab, setActiveTab]     = useState<"fiches" | "avances">("fiches")
   const [loading, setLoading]   = useState(false)
 
   const currentYear  = new Date().getFullYear()
@@ -61,9 +76,11 @@ export default function SalairesPage() {
     Promise.all([
       fetch("/api/salaires").then(r => r.ok ? r.json() : []),
       fetch("/api/employes").then(r => r.ok ? r.json() : []),
-    ]).then(([s, e]) => {
+      fetch("/api/avances").then(r => r.ok ? r.json() : []),
+    ]).then(([s, e, a]) => {
       if (Array.isArray(s)) setSalaires(s)
       if (Array.isArray(e)) setEmployes(e)
+      if (Array.isArray(a)) setAvances(a)
     })
   }, [])
 
@@ -72,16 +89,139 @@ export default function SalairesPage() {
     setForm(p => ({ ...p, employeId: id, salaireBase: emp ? String(emp.salaireBase) : "" }))
   }
 
+  // ── Avances ────────────────────────────────────────────────────────────────
+  async function handleAvanceSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setAvanceSaving(true)
+    const res = await fetch("/api/avances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(avanceForm),
+    })
+    if (res.ok) {
+      const n = await res.json()
+      const emp = employes.find(x => x.id === avanceForm.employeId)
+      setAvances(prev => [{ ...n, employe: { id: emp!.id, prenom: emp!.prenom, nom: emp!.nom, matricule: emp!.matricule, poste: emp!.poste } }, ...prev])
+      setShowAvanceForm(false)
+      setAvanceForm(emptyAvanceForm())
+      toast.success("Avance enregistrée")
+    } else toast.error("Erreur lors de l'enregistrement")
+    setAvanceSaving(false)
+  }
+
+  async function validerAvance(id: string) {
+    const res = await fetch(`/api/avances/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statut: "VALIDEE" }),
+    })
+    if (res.ok) {
+      setAvances(prev => prev.map(a => a.id === id ? { ...a, statut: "VALIDEE" } : a))
+      toast.success("Avance validée — sera déduite au prochain bulletin")
+    } else toast.error("Erreur")
+  }
+
+  async function supprimerAvance(id: string) {
+    if (!confirm("Supprimer cette avance ?")) return
+    const res = await fetch(`/api/avances/${id}`, { method: "DELETE" })
+    if (res.ok) { setAvances(prev => prev.filter(a => a.id !== id)); toast.success("Avance supprimée") }
+  }
+
+  // ── Export CNPS ────────────────────────────────────────────────────────────
+  function exportCNPS(mois: number, annee: number) {
+    const fichesExport = salaires.filter(s => s.mois === mois && s.annee === annee)
+    if (fichesExport.length === 0) { toast.error("Aucune fiche pour cette période"); return }
+
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+    const NAVY = [26, 52, 97] as [number, number, number]
+    const GREEN = [122, 179, 46] as [number, number, number]
+    const W = doc.internal.pageSize.getWidth()
+
+    // En-tête
+    doc.setFillColor(...NAVY)
+    doc.rect(0, 0, W, 22, "F")
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(14); doc.setFont("helvetica", "bold")
+    doc.text("DÉCLARATION CNPS MENSUELLE", W / 2, 9, { align: "center" })
+    doc.setFontSize(9); doc.setFont("helvetica", "normal")
+    doc.text(`SANOVIA Health Care  ·  ${MOIS[mois - 1].toUpperCase()} ${annee}`, W / 2, 16, { align: "center" })
+    doc.setTextColor(0, 0, 0)
+
+    // Sous-titre
+    doc.setFontSize(9); doc.setFont("helvetica", "italic")
+    doc.setTextColor(80, 80, 80)
+    doc.text(`Cotisations CNPS — Vieillesse-Invalidité-Décès · Allocations familiales · AT/MP`, 14, 28)
+    doc.setTextColor(0, 0, 0)
+
+    let totalBrut = 0, totalSal = 0, totalPat = 0
+
+    autoTable(doc, {
+      startY: 32,
+      head: [[
+        "N°", "Matricule", "Nom & Prénom", "Poste",
+        "Salaire base", "Primes", "HS", "Brut imposable",
+        "CNPS salarié 4.2%", "CNPS patronal 13.2%",
+      ]],
+      body: fichesExport.map((s, i) => {
+        totalBrut += s.brutImposable
+        totalSal  += s.cnpsSalarie
+        totalPat  += s.cnpsPatronal
+        return [
+          i + 1,
+          s.employe.matricule,
+          `${s.employe.nom.toUpperCase()} ${s.employe.prenom}`,
+          s.employe.poste,
+          s.salaireBase.toLocaleString("fr-FR"),
+          s.primes.toLocaleString("fr-FR"),
+          (s.montantHS || 0).toLocaleString("fr-FR"),
+          s.brutImposable.toLocaleString("fr-FR"),
+          s.cnpsSalarie.toLocaleString("fr-FR"),
+          s.cnpsPatronal.toLocaleString("fr-FR"),
+        ]
+      }),
+      foot: [[
+        "", "", "TOTAUX", "", "", "", "",
+        totalBrut.toLocaleString("fr-FR"),
+        totalSal.toLocaleString("fr-FR"),
+        totalPat.toLocaleString("fr-FR"),
+      ]],
+      headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold", fontSize: 8 },
+      footStyles: { fillColor: GREEN, textColor: 255, fontStyle: "bold", fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      alternateRowStyles: { fillColor: [245, 247, 250] as [number, number, number] },
+      columnStyles: {
+        0: { cellWidth: 8, halign: "center" },
+        4: { halign: "right" }, 5: { halign: "right" },
+        6: { halign: "right" }, 7: { halign: "right" },
+        8: { halign: "right" }, 9: { halign: "right" },
+      },
+    })
+
+    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10
+    doc.setFontSize(8); doc.setFont("helvetica", "bold")
+    doc.setTextColor(...NAVY)
+    doc.text(`Total CNPS salarié : ${totalSal.toLocaleString("fr-FR")} FCFA  ·  Total CNPS patronal : ${totalPat.toLocaleString("fr-FR")} FCFA  ·  Total à reverser : ${(totalSal + totalPat).toLocaleString("fr-FR")} FCFA`, 14, finalY)
+
+    doc.setFontSize(7); doc.setFont("helvetica", "italic")
+    doc.setTextColor(120, 120, 120)
+    doc.text("Document généré par Mon RH — SANOVIA Health Care. À conserver pour la déclaration mensuelle DS.", 14, finalY + 6)
+
+    doc.save(`CNPS_${MOIS[mois - 1]}_${annee}.pdf`)
+    toast.success("Déclaration CNPS exportée")
+  }
+
   function startEdit(s: Salaire) {
     setEditId(s.id)
     setForm({
-      employeId:   s.employe.id,
-      mois:        String(s.mois),
-      annee:       String(s.annee),
-      salaireBase: String(s.salaireBase),
-      primes:      String(s.primes),
-      retenues:    String(s.retenues),
-      notes:       s.notes ?? "",
+      employeId:             s.employe.id,
+      mois:                  String(s.mois),
+      annee:                 String(s.annee),
+      salaireBase:           String(s.salaireBase),
+      primes:                String(s.primes),
+      retenues:              String(s.retenues),
+      notes:                 s.notes ?? "",
+      heuresSupplementaires: String(s.heuresSupplementaires || 0),
+      tauxHS:                "NORMAL",
     })
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -188,9 +328,18 @@ export default function SalairesPage() {
   const netPending = enAttente.reduce((a, s) => a + s.netAPayer, 0)
   const netPaye    = salaires.filter(s => s.statut === "PAYE").reduce((a, s) => a + s.netAPayer, 0)
   const netTotal   = salaires.reduce((a, s) => a + s.netAPayer, 0)
+  const previewHS = form.salaireBase && parseFloat(form.heuresSupplementaires || "0") > 0
+    ? calculerHS(parseFloat(form.salaireBase) || 0, parseFloat(form.heuresSupplementaires || "0"), form.tauxHS)
+    : 0
   const previewCalc: DetailsSalaire | null = form.salaireBase
-    ? calculerSalaire(parseFloat(form.salaireBase) || 0, parseFloat(form.primes || "0") || 0, parseFloat(form.retenues || "0") || 0)
+    ? calculerSalaire(parseFloat(form.salaireBase) || 0, parseFloat(form.primes || "0") || 0, parseFloat(form.retenues || "0") || 0, previewHS)
     : null
+
+  // Avances validées non déduites pour l'employé sélectionné
+  const avancesEnAttentePourEmploye = useMemo(() =>
+    avances.filter(a => a.employe.id === form.employeId && a.statut === "VALIDEE"),
+    [avances, form.employeId]
+  )
 
   return (
     <div className="space-y-6">
@@ -201,21 +350,79 @@ export default function SalairesPage() {
           <h1 className="text-2xl font-bold text-slate-900">Salaires & Paie</h1>
           <p className="text-sm text-slate-500 mt-1">{salaires.length} fiche(s) au total</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {salaires.length > 0 && (
             <button onClick={exportSalairesCSV}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
               <FileDown className="h-4 w-4" />
-              Export CSV
+              CSV
             </button>
           )}
           <button
-            onClick={() => { setEditId(null); setForm(emptyForm(currentMonth, currentYear)); setShowForm(true) }}
+            onClick={() => exportCNPS(currentMonth, currentYear)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border text-white"
+            style={{ background: "linear-gradient(135deg, #1a3461, #1e8bc0)", borderColor: "#1a3461" }}>
+            <Shield className="h-4 w-4" />
+            CNPS {MOIS[currentMonth - 1]}
+          </button>
+          <button
+            onClick={() => { setShowAvanceForm(p => !p); setActiveTab("avances") }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100">
+            <CreditCard className="h-4 w-4" />
+            Avance
+          </button>
+          <button
+            onClick={() => { setEditId(null); setForm(emptyForm(currentMonth, currentYear)); setShowForm(true); setActiveTab("fiches") }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
             style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
             <Plus className="h-4 w-4" />
-            Générer une fiche
+            Fiche de salaire
           </button>
+        </div>
+      </div>
+
+      {/* ── Formulaire avance ── */}
+      <div className={`transition-all duration-300 overflow-hidden ${showAvanceForm ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"}`}>
+        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-amber-500" />
+              Enregistrer une avance sur salaire
+            </h2>
+            <button onClick={() => setShowAvanceForm(false)} className="text-slate-400 hover:text-slate-700">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <form onSubmit={handleAvanceSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600">Employé *</Label>
+              <Select value={avanceForm.employeId} onValueChange={v => setAvanceForm(p => ({ ...p, employeId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                <SelectContent>{employes.filter(e => e.statut === "ACTIF").map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600">Montant (FCFA) *</Label>
+              <Input type="number" value={avanceForm.montant} onChange={e => setAvanceForm(p => ({ ...p, montant: e.target.value }))} min="0" step="1000" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600">Date</Label>
+              <Input type="date" value={avanceForm.date} onChange={e => setAvanceForm(p => ({ ...p, date: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600">Motif</Label>
+              <Input value={avanceForm.motif} onChange={e => setAvanceForm(p => ({ ...p, motif: e.target.value }))} placeholder="Raison..." />
+            </div>
+            <div className="col-span-4 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowAvanceForm(false)} className="px-4 py-2 rounded-lg text-sm text-slate-600 border border-slate-200 bg-white">Annuler</button>
+              <button type="submit" disabled={avanceSaving || !avanceForm.employeId || !avanceForm.montant}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: "#d97706" }}>
+                {avanceSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Enregistrer l'avance
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -233,7 +440,7 @@ export default function SalairesPage() {
                 <button key={e.id}
                   onClick={() => {
                     setEditId(null)
-                    setForm({ employeId: e.id, mois: String(currentMonth), annee: String(currentYear), salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "" })
+                    setForm({ employeId: e.id, mois: String(currentMonth), annee: String(currentYear), salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "", heuresSupplementaires: "0", tauxHS: "NORMAL" })
                     setShowForm(true)
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }}
@@ -315,9 +522,33 @@ export default function SalairesPage() {
               <Input type="number" value={form.primes} onChange={e => setForm(p => ({ ...p, primes: e.target.value }))} min="0" step="1000" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600">Retenues</Label>
+              <Label className="text-xs font-medium text-slate-600">Retenues manuelles</Label>
               <Input type="number" value={form.retenues} onChange={e => setForm(p => ({ ...p, retenues: e.target.value }))} min="0" step="1000" />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600">Heures supplémentaires</Label>
+              <Input type="number" value={form.heuresSupplementaires} onChange={e => setForm(p => ({ ...p, heuresSupplementaires: e.target.value }))} min="0" step="0.5" placeholder="0" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600">Taux HS</Label>
+              <Select value={form.tauxHS} onValueChange={v => setForm(p => ({ ...p, tauxHS: v as TauxHS }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NORMAL">+20% — Normal (≤8h/sem.)</SelectItem>
+                  <SelectItem value="ELEVE">+50% — Élevé (&gt;8h/sem.)</SelectItem>
+                  <SelectItem value="DIMANCHE">+75% — Dimanche/Férié</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {avancesEnAttentePourEmploye.length > 0 && (
+              <div className="col-span-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
+                <p className="font-semibold text-amber-800 mb-1">Avances à déduire automatiquement</p>
+                {avancesEnAttentePourEmploye.map(a => (
+                  <p key={a.id} className="text-amber-700">— {a.montant.toLocaleString("fr-FR")} FCFA {a.motif ? `(${a.motif})` : ""}</p>
+                ))}
+                <p className="text-amber-600 mt-1 font-medium">Total : {avancesEnAttentePourEmploye.reduce((s, a) => s + a.montant, 0).toLocaleString("fr-FR")} FCFA</p>
+              </div>
+            )}
             <div className="space-y-1.5 col-span-3">
               <Label className="text-xs font-medium text-slate-600">Notes</Label>
               <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Observations..." />
@@ -327,6 +558,7 @@ export default function SalairesPage() {
                 <p className="font-semibold text-blue-800 mb-2 text-sm">Simulation — Droit camerounais (CNPS · IRPP · CAC · RAV)</p>
                 {([
                   { label: "Salaire brut imposable", val: previewCalc.brutImposable, cls: "text-slate-800 font-medium" },
+                  ...(previewHS > 0 ? [{ label: `Heures sup. (${form.heuresSupplementaires}h × taux ${form.tauxHS})`, val: previewHS, cls: "text-emerald-700" }] : []),
                   { label: `CNPS salarié 4.2% (plaf. ${CAMEROUN.CNPS_PLAFOND_MENSUEL.toLocaleString("fr-FR")} FCFA)`, val: -previewCalc.cnpsSalarie, cls: "text-red-700" },
                   { label: "Revenu net imposable", val: previewCalc.revenuNetImposable, cls: "text-slate-500 italic" },
                   { label: `Abattement forfaitaire (30%, plaf. 25 000)`, val: -previewCalc.abattement, cls: "text-red-700" },
@@ -363,6 +595,87 @@ export default function SalairesPage() {
         </div>
       </div>
 
+      {/* Onglets */}
+      <div className="flex gap-1 border-b border-slate-200">
+        {(["fiches", "avances"] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            {tab === "fiches" ? `Fiches de paie (${salaires.length})` : `Avances (${avances.filter(a => a.statut !== "DEDUITE").length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Onglet Avances ── */}
+      {activeTab === "avances" && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-amber-500" />
+              <span className="font-semibold text-slate-900 text-sm">Avances sur salaire</span>
+            </div>
+            <span className="text-xs text-slate-400">{avances.filter(a => a.statut === "VALIDEE").length} validée(s) à déduire</span>
+          </div>
+          {avances.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <CreditCard className="h-10 w-10 mx-auto mb-3 opacity-20" />
+              <p className="text-sm">Aucune avance enregistrée</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    {["Employé", "Montant", "Date", "Motif", "Statut", "Actions"].map(h => (
+                      <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase text-left">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {avances.map(a => (
+                    <tr key={a.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-medium text-slate-900">{a.employe.prenom} {a.employe.nom}</p>
+                        <p className="text-xs text-slate-400">{a.employe.poste}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-bold text-slate-800 tabular-nums">{a.montant.toLocaleString("fr-FR")} FCFA</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{new Date(a.date).toLocaleDateString("fr-FR")}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{a.motif || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          a.statut === "VALIDEE" ? "bg-blue-100 text-blue-700" :
+                          a.statut === "DEDUITE" ? "bg-green-100 text-green-700" :
+                          "bg-amber-100 text-amber-700"
+                        }`}>
+                          {a.statut === "EN_ATTENTE" ? "En attente" : a.statut === "VALIDEE" ? "Validée" : "Déduite"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {a.statut === "EN_ATTENTE" && (
+                            <button onClick={() => validerAvance(a.id)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border"
+                              style={{ borderColor: "#bfdbfe", color: "#1d4ed8", background: "#eff6ff" }}>
+                              <Check className="h-3 w-3" /> Valider
+                            </button>
+                          )}
+                          {a.statut !== "DEDUITE" && (
+                            <button onClick={() => supprimerAvance(a.id)}
+                              className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "fiches" && <>
       {/* Filtres */}
       <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
         <div className="col-span-2 flex items-center gap-1.5 text-xs text-slate-500 font-medium sm:w-auto">
@@ -571,6 +884,7 @@ export default function SalairesPage() {
           </>
         )}
       </div>
+      </> }
     </div>
   )
 }

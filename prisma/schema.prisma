@@ -71,6 +71,7 @@ model Employe {
   pointages              Pointage[]
   utilisateur            User?
   formations             ParticipationFormation[]
+  avances                AvanceSalaire[]
 }
 
 // ─── CONGÉS ────────────────────────────────────────────────────────────────
@@ -234,16 +235,48 @@ model HistoriqueSalaire {
   irpp         Float     @default(0)   // IRPP mensuel (barème progressif)
   cac          Float     @default(0)   // 10% de l'IRPP (Centimes Add. Communaux)
   rav          Float     @default(625) // Redevance Audiovisuelle mensuelle
+  // ── Heures supplémentaires (Code du Travail camerounais) ──
+  heuresSupplementaires Float @default(0)   // nb heures sup travaillées
+  montantHS             Float @default(0)   // montant brut calculé des HS
   // ── Charges patronales (informatif) ──
   cnpsPatronal Float     @default(0)   // 13.2% du brut plafonné (3.7+7+2.5)
-  brutImposable Float    @default(0)   // Brut = base + primes
+  brutImposable Float    @default(0)   // Brut = base + primes + HS
   netAPayer    Float
+  avanceDeduite Float    @default(0)   // avance sur salaire déduite ce mois
   statut       String    @default("EN_ATTENTE")
   datePaiement DateTime?
   notes        String?
   createdAt    DateTime  @default(now())
 
   employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+}
+
+// ─── AVANCES SUR SALAIRE ───────────────────────────────────────────────────
+
+model AvanceSalaire {
+  id         String   @id @default(cuid())
+  employeId  String
+  montant    Float
+  date       DateTime @default(now())
+  motif      String?
+  statut     String   @default("EN_ATTENTE") // EN_ATTENTE | VALIDEE | DEDUITE
+  bulletinId String?  // id du HistoriqueSalaire sur lequel elle a été déduite
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+}
+
+// ─── ANNONCES INTERNES ────────────────────────────────────────────────────
+
+model Annonce {
+  id        String   @id @default(cuid())
+  titre     String
+  contenu   String
+  type      String   @default("INFO") // INFO | IMPORTANT | URGENT
+  auteur    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── ÉVALUATIONS DE PERFORMANCE ────────────────────────────────────────────

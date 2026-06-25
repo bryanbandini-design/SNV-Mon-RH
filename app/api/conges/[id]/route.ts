@@ -10,11 +10,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const { statut, commentaire } = await req.json()
 
+  // Récupérer l'état actuel avant mise à jour pour gérer le solde
+  const congeAvant = await prisma.conge.findUnique({
+    where: { id },
+    select: { statut: true, nbJours: true, type: true, employeId: true },
+  })
+
   const conge = await prisma.conge.update({
     where: { id },
     data: { statut, commentaire: commentaire || null },
     include: { employe: { select: { prenom: true, nom: true, utilisateur: { select: { id: true } } } } },
   })
+
+  // Gestion automatique du solde de congés annuels
+  if (congeAvant && conge.type === "ANNUEL") {
+    if (statut === "APPROUVE" && congeAvant.statut !== "APPROUVE") {
+      // Déduire les jours du solde
+      await prisma.employe.update({
+        where: { id: congeAvant.employeId },
+        data: { soldeCongesAnnuels: { decrement: congeAvant.nbJours } },
+      })
+    } else if (statut === "REFUSE" && congeAvant.statut === "APPROUVE") {
+      // Rembourser les jours si refus après approbation
+      await prisma.employe.update({
+        where: { id: congeAvant.employeId },
+        data: { soldeCongesAnnuels: { increment: congeAvant.nbJours } },
+      })
+    }
+  }
 
   const employeUser = conge.employe?.utilisateur
   if (employeUser && (statut === "APPROUVE" || statut === "REFUSE")) {

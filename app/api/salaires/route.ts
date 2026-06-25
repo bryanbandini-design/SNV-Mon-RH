@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logActivity } from "@/lib/activity-log"
 import { MOIS } from "@/lib/utils"
-import { calculerSalaire } from "@/lib/cameroun-salaire"
+import { calculerSalaire, calculerHS } from "@/lib/cameroun-salaire"
 
 export async function GET() {
   const session = await auth()
@@ -26,29 +26,49 @@ export async function POST(req: Request) {
   const salaireBase = parseFloat(data.salaireBase) || 0
   const primes      = parseFloat(data.primes ?? 0)  || 0
   const retenues    = parseFloat(data.retenues ?? 0) || 0
+  const nbHS        = parseFloat(data.heuresSupplementaires ?? 0) || 0
+  const tauxHS      = (data.tauxHS as string) || "NORMAL"
+  const montantHS   = nbHS > 0 ? calculerHS(salaireBase, nbHS, tauxHS as "NORMAL" | "ELEVE" | "DIMANCHE") : 0
 
-  const calcul = calculerSalaire(salaireBase, primes, retenues)
+  // Avances validées non encore déduites pour cet employé
+  const avancesValides = await prisma.avanceSalaire.findMany({
+    where: { employeId: data.employeId, statut: "VALIDEE" },
+  })
+  const avanceDeduite = avancesValides.reduce((s, a) => s + a.montant, 0)
+
+  const calcul = calculerSalaire(salaireBase, primes, retenues + avanceDeduite, montantHS)
 
   const salaire = await prisma.historiqueSalaire.create({
     data: {
-      employeId:     data.employeId,
-      mois:          parseInt(data.mois),
-      annee:         parseInt(data.annee),
+      employeId:            data.employeId,
+      mois:                 parseInt(data.mois),
+      annee:                parseInt(data.annee),
       salaireBase,
       primes,
       retenues,
-      brutImposable: calcul.brutImposable,
-      cnpsSalarie:   calcul.cnpsSalarie,
-      irpp:          calcul.irpp,
-      cac:           calcul.cac,
-      rav:           calcul.rav,
-      cnpsPatronal:  calcul.cnpsPatronal,
-      netAPayer:     calcul.netAPayer,
-      statut:        "EN_ATTENTE",
-      notes:         data.notes || null,
+      heuresSupplementaires: nbHS,
+      montantHS,
+      avanceDeduite,
+      brutImposable:        calcul.brutImposable,
+      cnpsSalarie:          calcul.cnpsSalarie,
+      irpp:                 calcul.irpp,
+      cac:                  calcul.cac,
+      rav:                  calcul.rav,
+      cnpsPatronal:         calcul.cnpsPatronal,
+      netAPayer:            calcul.netAPayer,
+      statut:               "EN_ATTENTE",
+      notes:                data.notes || null,
     },
     include: { employe: { select: { prenom: true, nom: true } } },
   })
+
+  // Marquer les avances comme DEDUITE et les lier à ce bulletin
+  if (avancesValides.length > 0) {
+    await prisma.avanceSalaire.updateMany({
+      where: { id: { in: avancesValides.map(a => a.id) } },
+      data:  { statut: "DEDUITE", bulletinId: salaire.id },
+    })
+  }
 
   const moisLabel = MOIS[salaire.mois - 1] ?? `Mois ${salaire.mois}`
   await logActivity({

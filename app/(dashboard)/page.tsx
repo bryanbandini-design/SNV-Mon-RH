@@ -4,7 +4,7 @@ import { auth } from "@/auth"
 import {
   Users, Calendar, AlertTriangle, DollarSign, Clock,
   FlaskConical, Plus, ArrowRight, TrendingUp, UserCheck,
-  CheckCircle, AlertCircle, ScanLine, ChevronRight,
+  CheckCircle, AlertCircle, ScanLine, ChevronRight, FileWarning,
 } from "lucide-react"
 import { formatCurrency, formatDate, MOIS } from "@/lib/utils"
 import { DashboardCharts } from "@/components/dashboard/charts"
@@ -34,6 +34,7 @@ export default async function DashboardPage() {
     dossiersDelaiDepasse,
     pointagesFaceEchec,
     totalEmployes,
+    cddExpirant,
   ] = await Promise.all([
     prisma.employe.count({ where: { statut: "ACTIF" } }),
     prisma.conge.count({ where: { statut: "EN_ATTENTE" } }),
@@ -73,6 +74,15 @@ export default async function DashboardPage() {
     prisma.pointage.count({ where: { statut: "FACE_ECHEC", dateEntree: { gte: todayStart, lt: todayEnd } } }),
     // Pour calculer fiches manquantes
     prisma.employe.count({ where: { statut: "ACTIF" } }),
+    // CDD expirant dans les 30 jours
+    prisma.employe.findMany({
+      where: {
+        statut: "ACTIF",
+        typeContrat: "CDD",
+        dateFinContrat: { gte: now, lte: new Date(now.getTime() + 30 * 86400000) },
+      },
+      select: { id: true, prenom: true, nom: true, poste: true, dateFinContrat: true },
+    }),
   ])
 
   // Fiches de salaire manquantes ce mois
@@ -115,7 +125,7 @@ export default async function DashboardPage() {
   const netMois = salairesMois._sum.netAPayer ?? 0
 
   // Total d'actions à traiter
-  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + (pointagesFaceEchec > 0 ? 1 : 0) + essaisExpiration
+  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + (pointagesFaceEchec > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length
 
   const kpis = [
     { label: "Employés actifs",    value: totalActifs.toString(),
@@ -328,6 +338,47 @@ export default async function DashboardPage() {
                   className="mt-3 flex items-center gap-1 text-xs font-semibold"
                   style={{ color: "#c2410c" }}>
                   Voir <ChevronRight className="h-3 w-3" />
+                </Link>
+              </div>
+            )}
+
+            {/* CDD expirant dans 30 jours */}
+            {cddExpirant.length > 0 && (
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileWarning className="h-4 w-4" style={{ color: "#a855f7" }} />
+                    <span className="text-xs font-semibold text-slate-700">CDD expirant</span>
+                  </div>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "#faf5ff", color: "#7c3aed" }}>
+                    {cddExpirant.length}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {cddExpirant.map(e => {
+                    const jours = Math.ceil((new Date(e.dateFinContrat!).getTime() - now.getTime()) / 86400000)
+                    return (
+                      <div key={e.id} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="h-5 w-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                            style={{ background: "linear-gradient(135deg,#c084fc,#a855f7)" }}>
+                            {e.prenom[0]}{e.nom[0]}
+                          </div>
+                          <span className="text-xs text-slate-700 truncate font-medium">{e.prenom} {e.nom}</span>
+                        </div>
+                        <span className="text-[10px] font-semibold flex-shrink-0"
+                          style={{ color: jours <= 7 ? "#dc2626" : "#9333ea" }}>
+                          J−{jours}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <Link href="/employes"
+                  className="mt-3 flex items-center gap-1 text-xs font-semibold"
+                  style={{ color: "#7c3aed" }}>
+                  Décider <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
             )}

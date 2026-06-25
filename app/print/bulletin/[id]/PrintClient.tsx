@@ -45,6 +45,9 @@ type Props = {
   salaireBase:  number
   primes:       number
   retenues:     number
+  heuresSupplementaires?: number
+  montantHS?:   number
+  avanceDeduite?: number
   calc:         DetailsSalaire
   baseCNPS:     number
   genereLe:     string
@@ -63,7 +66,7 @@ async function loadImageAsBase64(url: string): Promise<string> {
 
 export default function PrintClient(props: Props) {
   const { moisLib, annee, isPaye, datePaiement, notes, employe, entreprise,
-          salaireBase, primes, retenues, calc, baseCNPS } = props
+          salaireBase, primes, retenues, heuresSupplementaires, montantHS, avanceDeduite, calc, baseCNPS } = props
 
   const [platform, setPlatform] = useState<"android" | "ios" | "web">("web")
   const [sharing,  setSharing]  = useState(false)
@@ -137,6 +140,10 @@ export default function PrintClient(props: Props) {
         { content: n(salaireBase), styles: { halign: "right", textColor: RGB.greenDark } },
         "",
       ])
+      if ((heuresSupplementaires ?? 0) > 0 && (montantHS ?? 0) > 0) rows.push([
+        "1010", `Heures supplémentaires (${heuresSupplementaires}h)`, "", "",
+        { content: n(montantHS!), styles: { halign: "right", textColor: RGB.greenDark } }, "",
+      ])
       if (primes > 0) rows.push([
         "1001", "Primes et avantages divers", "", "",
         { content: n(primes), styles: { halign: "right", textColor: RGB.greenDark } }, "",
@@ -170,6 +177,10 @@ export default function PrintClient(props: Props) {
       rows.push([
         "3004", "RAV — Redevance Audiovisuelle", "", "Forfait", "",
         { content: n(calc.rav), styles: { halign: "right", textColor: RGB.red } },
+      ])
+      if ((avanceDeduite ?? 0) > 0) rows.push([
+        "3010", "Avance sur salaire déduite", "", "", "",
+        { content: n(avanceDeduite!), styles: { halign: "right", textColor: RGB.red } },
       ])
       if (retenues > 0) rows.push([
         "3005", "Autres retenues (avances, absences…)", "", "", "",
@@ -541,6 +552,15 @@ export default function PrintClient(props: Props) {
                   <td className="r gain"><strong>{n(salaireBase)}</strong></td>
                   <td></td>
                 </tr>
+                {(heuresSupplementaires ?? 0) > 0 && (montantHS ?? 0) > 0 && (
+                  <tr>
+                    <td>1010</td>
+                    <td>Heures supplémentaires ({heuresSupplementaires}h)</td>
+                    <td></td><td></td>
+                    <td className="r gain">{n(montantHS!)}</td>
+                    <td></td>
+                  </tr>
+                )}
                 {primes > 0 && (
                   <tr>
                     <td className="code">1001</td>
@@ -596,6 +616,15 @@ export default function PrintClient(props: Props) {
                   <td></td>
                   <td className="r ret">{n(calc.rav)}</td>
                 </tr>
+                {(avanceDeduite ?? 0) > 0 && (
+                  <tr>
+                    <td>3010</td>
+                    <td>Avance sur salaire déduite</td>
+                    <td></td><td></td>
+                    <td></td>
+                    <td className="r ret">{n(avanceDeduite!)}</td>
+                  </tr>
+                )}
                 {retenues > 0 && (
                   <tr>
                     <td className="code">3005</td>

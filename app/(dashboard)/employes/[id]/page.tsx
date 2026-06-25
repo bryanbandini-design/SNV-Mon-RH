@@ -89,6 +89,12 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
         <div className="flex items-center gap-2 flex-wrap">
           <AttestationButtons employeId={employe.id} />
           <FaceEnrollButton employeId={employe.id} hasFace={!!employe.faceDescriptor} />
+          <Link href={`/employes/${employe.id}/contrat`}>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <FileText className="h-4 w-4" />
+              Contrat
+            </button>
+          </Link>
           <Link href={`/employes/${employe.id}/modifier`}>
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <Edit className="h-4 w-4" />

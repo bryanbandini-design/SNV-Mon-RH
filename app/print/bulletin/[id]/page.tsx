@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect, notFound } from "next/navigation"
 import { calculerSalaire, CAMEROUN } from "@/lib/cameroun-salaire"
+// montantHS est déjà stocké en base, on le passe directement
 import { MOIS } from "@/lib/utils"
 import PrintClient from "./PrintClient"
 
@@ -32,7 +33,9 @@ export default async function BulletinPrintPage({ params }: { params: Promise<{ 
     dirigeant: params_map.ENTREPRISE_DIRIGEANT  || "",
   }
 
-  const calc     = calculerSalaire(salaire.salaireBase, salaire.primes, salaire.retenues)
+  const montantHS = salaire.montantHS ?? 0
+  const avanceDeduite = salaire.avanceDeduite ?? 0
+  const calc     = calculerSalaire(salaire.salaireBase, salaire.primes, salaire.retenues + avanceDeduite, montantHS)
   const moisLib  = MOIS[salaire.mois - 1] ?? `Mois ${salaire.mois}`
   const isPaye   = salaire.statut === "PAYE"
   const baseCNPS = Math.min(calc.brutImposable, CAMEROUN.CNPS_PLAFOND_MENSUEL)
@@ -57,6 +60,9 @@ export default async function BulletinPrintPage({ params }: { params: Promise<{ 
       salaireBase={salaire.salaireBase}
       primes={salaire.primes}
       retenues={salaire.retenues}
+      heuresSupplementaires={salaire.heuresSupplementaires ?? 0}
+      montantHS={montantHS}
+      avanceDeduite={avanceDeduite}
       calc={calc}
       baseCNPS={baseCNPS}
       genereLe={new Date().toLocaleDateString("fr-FR")}

@@ -9,7 +9,7 @@ import {
   LayoutDashboard, LogOut, TrendingUp, Clock,
   Bell, X, Check, ShieldOff, ChevronDown,
   FileText, FolderOpen, MessageSquareWarning, ScanLine, History,
-  UserSearch, GraduationCap, GitBranch, Settings, UserCog,
+  UserSearch, GraduationCap, GitBranch, Settings, UserCog, Megaphone,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
 import { cn } from "@/lib/utils"
@@ -76,6 +76,8 @@ const NAV_SECTIONS = [
       },
       { name: "Formations",   href: "/formations",          icon: GraduationCap,
         color: "text-teal-400", bg: "bg-teal-400/12", glow: "#2dd4bf", perm: "FORMATIONS" as PermKey },
+      { name: "Annonces",     href: "/annonces",             icon: Megaphone,
+        color: "text-indigo-400", bg: "bg-indigo-400/12", glow: "#818cf8" },
       { name: "Organigramme", href: "/employes/organigramme", icon: GitBranch,
         color: "text-violet-400", bg: "bg-violet-400/12", glow: "#a78bfa", perm: "ORGANIGRAMME" as PermKey },
     ],
