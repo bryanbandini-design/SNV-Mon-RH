@@ -40,11 +40,14 @@ export async function GET() {
 export async function POST(req: Request) {
   if (!await requireAdmin()) return NextResponse.json({ message: "Accès refusé" }, { status: 403 })
 
-  const { email, password, name, role, employeId, permissions: rawPerms } = await req.json()
+  const { email: rawId, password, name, role, employeId, permissions: rawPerms } = await req.json()
 
-  if (!email || !password || !role) {
-    return NextResponse.json({ message: "Champs requis : email, password, role" }, { status: 400 })
+  if (!rawId || !password || !role) {
+    return NextResponse.json({ message: "Champs requis : identifiant, password, role" }, { status: 400 })
   }
+
+  // Si l'identifiant ne contient pas @, c'est un nom d'utilisateur → stocké comme username@local
+  const email = (rawId as string).includes("@") ? (rawId as string) : `${rawId}@local`
 
   const VALID_ROLES = ["ADMIN", "RH", "RESPONSABLE", "EMPLOYE"]
   if (!VALID_ROLES.includes(role)) {

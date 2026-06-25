@@ -106,12 +106,12 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email</Label>
+              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Identifiant ou email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input id="email" type="email" placeholder="admin@monrh.com"
+                <Input id="email" type="text" placeholder="nom_utilisateur ou email@..."
                   value={email} onChange={e => setEmail(e.target.value)}
-                  className="pl-10" required autoFocus />
+                  className="pl-10" required autoFocus autoComplete="username" />
               </div>
             </div>
 

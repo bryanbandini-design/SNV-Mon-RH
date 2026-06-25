@@ -16,10 +16,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Mot de passe", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email as string | undefined
-        const password = credentials?.password as string | undefined
+        const identifier = (credentials?.email as string | undefined)?.trim()
+        const password   = credentials?.password as string | undefined
 
-        if (!email || !password) return null
+        if (!identifier || !password) return null
+
+        // Identifiant sans @ → nom d'utilisateur → cherche username@local
+        const email = identifier.includes("@") ? identifier : `${identifier}@local`
 
         const user = await prisma.user.findUnique({ where: { email } })
         if (!user) return null

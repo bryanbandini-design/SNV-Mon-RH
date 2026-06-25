@@ -40,6 +40,11 @@ function initials(name: string) {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
 }
 
+// Affiche l'identifiant sans le suffixe @local (utilisateurs sans email)
+function displayId(email: string) {
+  return email.endsWith("@local") ? email.replace("@local", "") : email
+}
+
 function avatarColor(role: string) {
   if (role === "ADMIN")       return "from-blue-500 to-indigo-600"
   if (role === "RH")          return "from-purple-500 to-violet-600"
@@ -66,7 +71,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
   })()
 
   const [name,        setName]        = useState(user?.name ?? "")
-  const [email,       setEmail]       = useState(user?.email ?? "")
+  const [email,       setEmail]       = useState(user ? displayId(user.email) : "")
   const [role,        setRole]        = useState(user?.role ?? "RH")
   const [password,    setPassword]    = useState("")
   const [showPwd,     setShowPwd]     = useState(false)
@@ -239,14 +244,19 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
             </div>
           )}
 
-          {/* Email */}
+          {/* Identifiant */}
           <div>
             <label className="text-xs font-medium text-slate-600 block mb-1.5">
-              <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> Email <span className="text-red-400">*</span></span>
+              <span className="inline-flex items-center gap-1">
+                <Mail className="h-3 w-3" /> Identifiant <span className="text-red-400">*</span>
+              </span>
             </label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              placeholder="jmbarga@entreprise.cm"
+            <input type="text" value={email} onChange={e => setEmail(e.target.value)} required
+              placeholder="nom_utilisateur  ou  email@domaine.cm"
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Sans @, le système crée un identifiant interne (ex : <em>jmbarga</em>). Avec @, un vrai email est utilisé.
+            </p>
           </div>
 
           {/* Mot de passe */}
@@ -405,13 +415,105 @@ function DeleteConfirm({ user, onClose, onDeleted }: { user: User; onClose: () =
   )
 }
 
+// ── Réinitialisation mot de passe ─────────────────────────────────────────
+
+function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void }) {
+  const [pwd,     setPwd]     = useState("")
+  const [confirm, setConfirm] = useState("")
+  const [showPwd, setShowPwd] = useState(false)
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+  const [done,    setDone]    = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (pwd !== confirm) { setError("Les mots de passe ne correspondent pas"); return }
+    if (pwd.length < 8)  { setError("Minimum 8 caractères"); return }
+    setSaving(true); setError(null)
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pwd }),
+    })
+    if (res.ok) { setDone(true) }
+    else { const d = await res.json(); setError(d.message ?? "Erreur"); setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+            <KeyRound className="h-5 w-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">Réinitialiser le mot de passe</p>
+            <p className="text-sm text-slate-500">{user.name} — {displayId(user.email)}</p>
+          </div>
+        </div>
+
+        {done ? (
+          <>
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+              <Check className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <p className="text-sm text-emerald-700 font-medium">Mot de passe mis à jour avec succès.</p>
+            </div>
+            <button onClick={onClose}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors">
+              Fermer
+            </button>
+          </>
+        ) : (
+          <form onSubmit={submit} className="space-y-4">
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">Nouveau mot de passe</label>
+              <div className="relative">
+                <input type={showPwd ? "text" : "password"} value={pwd}
+                  onChange={e => setPwd(e.target.value)} required placeholder="Min. 8 caractères"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                <button type="button" onClick={() => setShowPwd(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">Confirmer le mot de passe</label>
+              <input type={showPwd ? "text" : "password"} value={confirm}
+                onChange={e => setConfirm(e.target.value)} required placeholder="Retaper le mot de passe"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
+                Annuler
+              </button>
+              <button type="submit" disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-60">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                Réinitialiser
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Page principale ────────────────────────────────────────────────────────
 
 export default function UtilisateursPage() {
   const [users,    setUsers]    = useState<User[]>([])
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState("")
-  const [modal,    setModal]    = useState<"create" | "edit" | "delete" | null>(null)
+  const [modal,    setModal]    = useState<"create" | "edit" | "delete" | "reset" | null>(null)
   const [selected, setSelected] = useState<User | null>(null)
 
   const load = useCallback(() => {
@@ -449,6 +551,9 @@ export default function UtilisateursPage() {
       )}
       {modal === "delete" && selected && (
         <DeleteConfirm user={selected} onClose={() => setModal(null)} onDeleted={load} />
+      )}
+      {modal === "reset" && selected && (
+        <ResetPasswordModal user={selected} onClose={() => setModal(null)} />
       )}
 
       {/* Header */}
@@ -525,7 +630,7 @@ export default function UtilisateursPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-slate-900 truncate">{u.name}</p>
-                        <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                        <p className="text-xs text-slate-500 truncate">{displayId(u.email)}</p>
                       </div>
                     </div>
                   </td>
@@ -547,6 +652,12 @@ export default function UtilisateursPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => { setSelected(u); setModal("reset") }}
+                        className="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+                        title="Réinitialiser le mot de passe">
+                        <KeyRound className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => { setSelected(u); setModal("edit") }}
                         className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"

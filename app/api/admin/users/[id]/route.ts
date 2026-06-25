@@ -18,14 +18,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const { id } = await params
   const body = await req.json()
-  const { email, name, role, password, permissions: rawPerms } = body
+  const { email: rawId, name, role, password, permissions: rawPerms } = body
 
   const existing = await prisma.user.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ message: "Utilisateur introuvable" }, { status: 404 })
 
+  // Conversion identifiant → email interne si besoin
+  const email = rawId
+    ? ((rawId as string).includes("@") ? (rawId as string) : `${rawId}@local`)
+    : undefined
+
   if (email && email !== existing.email) {
     const conflict = await prisma.user.findUnique({ where: { email } })
-    if (conflict) return NextResponse.json({ message: "Cet email est déjà utilisé" }, { status: 409 })
+    if (conflict) return NextResponse.json({ message: "Cet identifiant est déjà utilisé" }, { status: 409 })
   }
 
   if (role) {
