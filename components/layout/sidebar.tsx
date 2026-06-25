@@ -288,18 +288,16 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
           style={{ background: "radial-gradient(circle at 0% 0%, rgba(56,189,248,0.12) 0%, transparent 70%)" }} />
 
         {/* ── Logo ──────────────────────────────────────────────────────── */}
-        <div className="px-5 pt-5 pb-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="rounded-xl overflow-hidden flex-shrink-0"
-              style={{ background: "white", padding: "5px 10px", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-sanovia.png" alt="SANOVIA Health Care"
-                style={{ height: "28px", width: "auto", display: "block" }} />
-            </div>
-          </div>
-          <button onClick={onMobileClose} className="lg:hidden p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/8 transition-all">
+        <div className="pt-5 pb-4 flex items-center justify-center relative">
+          <button onClick={onMobileClose} className="lg:hidden absolute right-3 top-1 p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.08] transition-all">
             <X className="h-4 w-4" />
           </button>
+          {/* Icône fleurs uniquement — overflow masque le texte */}
+          <div style={{ width: "46px", height: "46px", borderRadius: "12px", overflow: "hidden", background: "white", boxShadow: "0 2px 14px rgba(0,0,0,0.35)", flexShrink: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-sanovia.png" alt="SANOVIA Health Care"
+              style={{ height: "46px", width: "auto", display: "block", maxWidth: "none" }} />
+          </div>
         </div>
 
         {/* Divider */}

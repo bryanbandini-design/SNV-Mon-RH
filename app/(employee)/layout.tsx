@@ -59,19 +59,16 @@ function EmployeeSidebar({ open, onClose, employe }: {
         onTouchMove={e => e.stopPropagation()}
       >
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-emerald-700/50 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-black text-sm">M</span>
-            </div>
-            <div>
-              <p className="text-white font-bold text-sm leading-none">Mon RH</p>
-              <p className="text-emerald-300 text-[10px] mt-0.5">Espace employé</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="lg:hidden text-emerald-300 hover:text-white transition-colors p-1">
+        <div className="py-5 border-b border-emerald-700/50 flex items-center justify-center relative">
+          <button onClick={onClose} className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 text-emerald-300 hover:text-white transition-colors p-1">
             <X className="h-5 w-5" />
           </button>
+          {/* Icône fleurs uniquement — overflow masque le texte */}
+          <div style={{ width: "46px", height: "46px", borderRadius: "12px", overflow: "hidden", background: "white", boxShadow: "0 2px 14px rgba(0,0,0,0.3)", flexShrink: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-sanovia.png" alt="SANOVIA Health Care"
+              style={{ height: "46px", width: "auto", display: "block", maxWidth: "none" }} />
+          </div>
         </div>
 
         {/* Avatar */}
