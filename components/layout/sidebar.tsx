@@ -245,11 +245,16 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
 
       <aside
         className={cn(
-          "flex h-screen flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out",
+          "flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out",
           "lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
-        style={{ width: "var(--sidebar-w)", background: "#080d1a" }}
+        style={{
+          width: "var(--sidebar-w)",
+          background: "#080d1a",
+          height: "100dvh",           /* dvh = tient compte de la barre Safari */
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         {/* Accent line gauche */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px]"

@@ -36,9 +36,11 @@ function EmployeeSidebar({ open, onClose, employe }: {
         <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden" onClick={onClose} />
       )}
       <aside className={cn(
-        "fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-emerald-900 to-emerald-800 flex flex-col z-50 transition-transform duration-300 ease-in-out",
+        "fixed left-0 top-0 w-64 bg-gradient-to-b from-emerald-900 to-emerald-800 flex flex-col z-50 transition-transform duration-300 ease-in-out",
         open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
+      )}
+        style={{ height: "100dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         {/* Logo */}
         <div className="px-5 py-5 border-b border-emerald-700/50 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
