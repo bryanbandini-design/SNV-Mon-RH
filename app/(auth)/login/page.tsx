@@ -143,10 +143,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 p-3 rounded-lg border border-slate-200 bg-white text-center">
-            <p className="text-xs text-slate-500">Compte par défaut</p>
-            <p className="text-xs font-mono text-slate-700 mt-1">admin@monrh.com · admin123</p>
-          </div>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Settings, Building2, DollarSign, Check, Loader2, AlertCircle, Calendar, Info } from "lucide-react"
+import { Settings, Building2, DollarSign, Check, Loader2, AlertCircle, Calendar, Info, KeyRound, Eye, EyeOff, ShieldCheck } from "lucide-react"
 import { CAMEROUN } from "@/lib/cameroun-salaire"
 
 type Params = Record<string, string>
@@ -26,6 +26,36 @@ export default function ParametresPage() {
   const [saving, setSaving]     = useState(false)
   const [saved, setSaved]       = useState(false)
   const [error, setError]       = useState<string | null>(null)
+
+  // ── Changement de mot de passe ──────────────────────────────────────────
+  const [pwdCurrent, setPwdCurrent] = useState("")
+  const [pwdNew,     setPwdNew]     = useState("")
+  const [pwdConfirm, setPwdConfirm] = useState("")
+  const [showPwd,    setShowPwd]    = useState(false)
+  const [pwdSaving,  setPwdSaving]  = useState(false)
+  const [pwdOk,      setPwdOk]      = useState(false)
+  const [pwdError,   setPwdError]   = useState<string | null>(null)
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPwdError(null); setPwdOk(false)
+    if (pwdNew !== pwdConfirm) { setPwdError("Les mots de passe ne correspondent pas"); return }
+    if (pwdNew.length < 8)     { setPwdError("Minimum 8 caractères requis"); return }
+    setPwdSaving(true)
+    try {
+      const res = await fetch("/api/mon-compte/password", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ currentPassword: pwdCurrent, newPassword: pwdNew }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setPwdError(d.message ?? "Erreur"); return }
+      setPwdOk(true)
+      setPwdCurrent(""); setPwdNew(""); setPwdConfirm("")
+      setTimeout(() => setPwdOk(false), 4000)
+    } catch { setPwdError("Erreur réseau") }
+    finally { setPwdSaving(false) }
+  }
 
   useEffect(() => {
     fetch("/api/parametres").then(r => r.json()).then(d => {
@@ -241,6 +271,69 @@ export default function ParametresPage() {
             <li>• La <strong>création d'employés</strong> (solde congés par défaut)</li>
           </ul>
         </div>
+      </div>
+
+      {/* ── Changer mon mot de passe ── */}
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-amber-100 text-amber-600">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900 text-sm">Changer mon mot de passe</p>
+            <p className="text-xs text-slate-500">Modifiez le mot de passe de votre compte</p>
+          </div>
+        </div>
+        <form onSubmit={changePassword} className="p-6 space-y-4 max-w-md">
+          {pwdError && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5">
+              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-700">{pwdError}</p>
+            </div>
+          )}
+          {pwdOk && (
+            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5">
+              <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
+              <p className="text-sm text-green-700 font-medium">Mot de passe mis à jour avec succès !</p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-1.5">Mot de passe actuel</label>
+            <div className="relative">
+              <input type={showPwd ? "text" : "password"} value={pwdCurrent}
+                onChange={e => setPwdCurrent(e.target.value)} required
+                placeholder="••••••••"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              <button type="button" onClick={() => setShowPwd(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-1.5">Nouveau mot de passe</label>
+            <input type={showPwd ? "text" : "password"} value={pwdNew}
+              onChange={e => setPwdNew(e.target.value)} required
+              placeholder="Min. 8 caractères"
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-1.5">Confirmer le nouveau mot de passe</label>
+            <input type={showPwd ? "text" : "password"} value={pwdConfirm}
+              onChange={e => setPwdConfirm(e.target.value)} required
+              placeholder="Retaper le mot de passe"
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          </div>
+
+          <button type="submit" disabled={pwdSaving}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-60">
+            {pwdSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+            Changer le mot de passe
+          </button>
+        </form>
       </div>
     </div>
   )
