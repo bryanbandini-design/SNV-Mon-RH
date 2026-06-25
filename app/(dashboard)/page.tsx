@@ -4,7 +4,7 @@ import { auth } from "@/auth"
 import {
   Users, Calendar, AlertTriangle, DollarSign, Clock,
   FlaskConical, Plus, ArrowRight, TrendingUp, UserCheck,
-  CheckCircle, AlertCircle, ScanLine, ChevronRight, FileWarning,
+  CheckCircle, AlertCircle, ScanLine, ChevronRight, FileWarning, Timer,
 } from "lucide-react"
 import { formatCurrency, formatDate, MOIS } from "@/lib/utils"
 import { DashboardCharts } from "@/components/dashboard/charts"
@@ -35,6 +35,8 @@ export default async function DashboardPage() {
     pointagesFaceEchec,
     totalEmployes,
     cddExpirant,
+    pointagesManuelsCount,
+    pointagesManuelsDetail,
   ] = await Promise.all([
     prisma.employe.count({ where: { statut: "ACTIF" } }),
     prisma.conge.count({ where: { statut: "EN_ATTENTE" } }),
@@ -83,6 +85,14 @@ export default async function DashboardPage() {
       },
       select: { id: true, prenom: true, nom: true, poste: true, dateFinContrat: true },
     }),
+    // Pointages manuels employés en attente de validation responsable
+    prisma.presence.count({ where: { saisieManuelle: true, statutValidation: "EN_ATTENTE" } }),
+    prisma.presence.findMany({
+      where: { saisieManuelle: true, statutValidation: "EN_ATTENTE" },
+      take: 4,
+      orderBy: { date: "asc" },
+      include: { employe: { select: { prenom: true, nom: true } } },
+    }),
   ])
 
   // Fiches de salaire manquantes ce mois
@@ -125,7 +135,9 @@ export default async function DashboardPage() {
   const netMois = salairesMois._sum.netAPayer ?? 0
 
   // Total d'actions à traiter
-  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + (pointagesFaceEchec > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = (session?.user as any)?.role as string | undefined
+  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + (pointagesFaceEchec > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length + (pointagesManuelsCount > 0 ? 1 : 0)
 
   const kpis = [
     { label: "Employés actifs",    value: totalActifs.toString(),
@@ -223,6 +235,52 @@ export default async function DashboardPage() {
                   className="mt-3 flex items-center gap-1 text-xs font-semibold"
                   style={{ color: "#d97706" }}>
                   Traiter <ChevronRight className="h-3 w-3" />
+                </Link>
+              </div>
+            )}
+
+            {/* Pointages manuels à valider — responsable en priorité */}
+            {pointagesManuelsCount > 0 && (
+              <div className={`p-4 ${role === "RESPONSABLE" ? "ring-2 ring-inset ring-emerald-200 bg-emerald-50/30" : ""}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Timer className="h-4 w-4" style={{ color: "#10b981" }} />
+                    <span className="text-xs font-semibold text-slate-700">Pointages à valider</span>
+                  </div>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "#ecfdf5", color: "#059669" }}>
+                    {pointagesManuelsCount}
+                  </span>
+                </div>
+                {role === "RESPONSABLE" && (
+                  <p className="text-[10px] text-emerald-600 font-medium mb-2">Votre validation est requise</p>
+                )}
+                <div className="space-y-1.5">
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(pointagesManuelsDetail as any[]).map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="h-5 w-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                          style={{ background: "linear-gradient(135deg,#34d399,#10b981)" }}>
+                          {p.employe.prenom[0]}{p.employe.nom[0]}
+                        </div>
+                        <span className="text-xs text-slate-700 truncate font-medium">
+                          {p.employe.prenom} {p.employe.nom}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 flex-shrink-0">
+                        {new Date(p.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                      </span>
+                    </div>
+                  ))}
+                  {pointagesManuelsCount > 4 && (
+                    <p className="text-[10px] text-slate-400">+ {pointagesManuelsCount - 4} autre(s)…</p>
+                  )}
+                </div>
+                <Link href="/pointage"
+                  className="mt-3 flex items-center gap-1 text-xs font-semibold"
+                  style={{ color: "#059669" }}>
+                  {role === "RESPONSABLE" ? "Valider maintenant" : "Voir les pointages"} <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
             )}
