@@ -292,14 +292,15 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
           <button onClick={onMobileClose} className="lg:hidden absolute right-3 top-1 p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.08] transition-all">
             <X className="h-4 w-4" />
           </button>
-          {/* Icône fleurs — hauteur image = diamètre cercle pour ne pas couper les feuilles */}
+          {/* Icône fleurs — cercle 80px, image 70px centrée : feuilles (~75px larges) tiennent dans le cercle */}
           <div style={{
-            width: "64px", height: "64px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-            boxShadow: "0 0 0 1.5px rgba(255,255,255,0.3), 0 0 8px rgba(255,255,255,0.65), 0 0 18px rgba(255,255,255,0.32), 0 0 34px rgba(255,255,255,0.14)",
+            width: "80px", height: "80px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+            display: "flex", alignItems: "center",
+            boxShadow: "0 0 0 1.5px rgba(255,255,255,0.3), 0 0 10px rgba(255,255,255,0.65), 0 0 22px rgba(255,255,255,0.32), 0 0 38px rgba(255,255,255,0.14)",
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-sanovia.png" alt="SANOVIA Health Care"
-              style={{ height: "64px", width: "auto", display: "block", maxWidth: "none" }} />
+              style={{ height: "70px", width: "auto", display: "block", maxWidth: "none" }} />
           </div>
         </div>
 
