@@ -21,7 +21,7 @@ function downloadCSV(rows: (string | number)[][], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-type Employe = { id: string; prenom: string; nom: string; matricule: string; poste: string; salaireBase: number }
+type Employe = { id: string; prenom: string; nom: string; matricule: string; poste: string; salaireBase: number; statut: string }
 type Salaire = {
   id: string; mois: number; annee: number; salaireBase: number
   primes: number; retenues: number; netAPayer: number
@@ -184,7 +184,7 @@ export default function SalairesPage() {
   const idsAvecFicheCeMois = new Set(
     salaires.filter(s => s.mois === currentMonth && s.annee === currentYear).map(s => s.employe.id)
   )
-  const employesSansFiche = employes.filter(e => !idsAvecFicheCeMois.has(e.id))
+  const employesSansFiche = employes.filter(e => e.statut === "ACTIF" && !idsAvecFicheCeMois.has(e.id))
   const netPending = enAttente.reduce((a, s) => a + s.netAPayer, 0)
   const netPaye    = salaires.filter(s => s.statut === "PAYE").reduce((a, s) => a + s.netAPayer, 0)
   const netTotal   = salaires.reduce((a, s) => a + s.netAPayer, 0)

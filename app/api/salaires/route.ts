@@ -10,11 +10,11 @@ export async function GET() {
   if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
 
   const salaires = await prisma.historiqueSalaire.findMany({
-    include: { employe: { select: { prenom: true, nom: true, matricule: true, poste: true } } },
+    include: { employe: { select: { id: true, prenom: true, nom: true, matricule: true, poste: true } } },
     orderBy: [{ annee: "desc" }, { mois: "desc" }],
   })
   return NextResponse.json(salaires, {
-    headers: { "Cache-Control": "private, max-age=120, stale-while-revalidate=300" },
+    headers: { "Cache-Control": "private, no-cache" },
   })
 }
 
