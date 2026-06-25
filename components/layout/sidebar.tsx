@@ -292,14 +292,14 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
           <button onClick={onMobileClose} className="lg:hidden absolute right-3 top-1 p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.08] transition-all">
             <X className="h-4 w-4" />
           </button>
-          {/* Icône fleurs — crop circulaire serré sur les feuilles, pas de fond blanc, néon blanc */}
+          {/* Icône fleurs — hauteur image = diamètre cercle pour ne pas couper les feuilles */}
           <div style={{
-            width: "52px", height: "52px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+            width: "64px", height: "64px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
             boxShadow: "0 0 0 1.5px rgba(255,255,255,0.3), 0 0 8px rgba(255,255,255,0.65), 0 0 18px rgba(255,255,255,0.32), 0 0 34px rgba(255,255,255,0.14)",
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-sanovia.png" alt="SANOVIA Health Care"
-              style={{ height: "56px", width: "auto", display: "block", maxWidth: "none", marginTop: "-2px" }} />
+              style={{ height: "64px", width: "auto", display: "block", maxWidth: "none" }} />
           </div>
         </div>
 
