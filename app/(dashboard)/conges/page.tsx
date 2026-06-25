@@ -626,7 +626,8 @@ export default function CongesPage() {
             <p className="text-sm">{hasFiltre ? "Aucun résultat pour ces filtres" : "Aucun congé traité"}</p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 {["Employé", "Type", "Période", "Jours", "Commentaire RH", "Statut", ""].map(h => (
@@ -673,6 +674,7 @@ export default function CongesPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
       )}

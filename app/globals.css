@@ -6,7 +6,16 @@
 
 
 /* ── Base ──────────────────────────────────────────── */
+html {
+  overflow-x: hidden;
+  /* Supporte les zones de sécurité iPhone (encoche, home indicator) */
+  padding-top:    env(safe-area-inset-top);
+  padding-left:   env(safe-area-inset-left);
+  padding-right:  env(safe-area-inset-right);
+}
+
 body {
+  overflow-x: hidden;
   background: #f1f5f9;
   color: #0f172a;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
@@ -20,6 +29,14 @@ body {
   touch-action: manipulation;
   /* Supprime le flash bleu/gris au tap sur Android */
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Responsive helpers ────────────────────────────── */
+/* Toutes les tables débordantes scrollent horizontalement */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0.5rem;
 }
 
 /* ── Feedback tactile immédiat ──────────────────────── */

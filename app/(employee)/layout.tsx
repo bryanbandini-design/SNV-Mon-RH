@@ -166,7 +166,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
           </div>
         </header>
         <main className="flex-1 overflow-auto">
-          <div className="max-w-5xl mx-auto p-4 sm:p-6">{children}</div>
+          <div className="max-w-5xl mx-auto p-3 sm:p-4 lg:p-6" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>{children}</div>
         </main>
       </div>
     </div>

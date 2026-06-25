@@ -504,7 +504,8 @@ export default function UtilisateursPage() {
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
                 <th className="text-left text-xs font-semibold text-slate-500 px-6 py-3">Utilisateur</th>
@@ -564,6 +565,7 @@ export default function UtilisateursPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
