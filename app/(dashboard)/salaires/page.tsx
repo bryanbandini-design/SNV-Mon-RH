@@ -7,13 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, DollarSign, Loader2, Check, TrendingUp, Clock,
   Pencil, Trash2, X, Filter, AlertCircle, FileDown, Printer,
-  CreditCard, Shield,
+  CreditCard,
 } from "lucide-react"
 import { formatCurrency, MOIS } from "@/lib/utils"
 import { toast } from "sonner"
 import { calculerSalaire, calculerHS, CAMEROUN, formatFCFA, type DetailsSalaire, type TauxHS } from "@/lib/cameroun-salaire"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+// Déclaration CNPS mensuelle retirée — à retravailler avec le fiscaliste
 
 function downloadCSV(rows: (string | number)[][], filename: string) {
   const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
@@ -127,88 +126,6 @@ export default function SalairesPage() {
     if (res.ok) { setAvances(prev => prev.filter(a => a.id !== id)); toast.success("Avance supprimée") }
   }
 
-  // ── Export CNPS ────────────────────────────────────────────────────────────
-  function exportCNPS(mois: number, annee: number) {
-    const fichesExport = salaires.filter(s => s.mois === mois && s.annee === annee)
-    if (fichesExport.length === 0) { toast.error("Aucune fiche pour cette période"); return }
-
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
-    const NAVY = [26, 52, 97] as [number, number, number]
-    const GREEN = [122, 179, 46] as [number, number, number]
-    const W = doc.internal.pageSize.getWidth()
-
-    // En-tête
-    doc.setFillColor(...NAVY)
-    doc.rect(0, 0, W, 22, "F")
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(14); doc.setFont("helvetica", "bold")
-    doc.text("DÉCLARATION CNPS MENSUELLE", W / 2, 9, { align: "center" })
-    doc.setFontSize(9); doc.setFont("helvetica", "normal")
-    doc.text(`SANOVIA Health Care  ·  ${MOIS[mois - 1].toUpperCase()} ${annee}`, W / 2, 16, { align: "center" })
-    doc.setTextColor(0, 0, 0)
-
-    // Sous-titre
-    doc.setFontSize(9); doc.setFont("helvetica", "italic")
-    doc.setTextColor(80, 80, 80)
-    doc.text(`Cotisations CNPS — Vieillesse-Invalidité-Décès · Allocations familiales · AT/MP`, 14, 28)
-    doc.setTextColor(0, 0, 0)
-
-    let totalBrut = 0, totalSal = 0, totalPat = 0
-
-    autoTable(doc, {
-      startY: 32,
-      head: [[
-        "N°", "Matricule", "Nom & Prénom", "Poste",
-        "Salaire base", "Primes", "HS", "Brut imposable",
-        "CNPS salarié 4.2%", "CNPS patronal 13.2%",
-      ]],
-      body: fichesExport.map((s, i) => {
-        totalBrut += s.brutImposable
-        totalSal  += s.cnpsSalarie
-        totalPat  += s.cnpsPatronal
-        return [
-          i + 1,
-          s.employe.matricule,
-          `${s.employe.nom.toUpperCase()} ${s.employe.prenom}`,
-          s.employe.poste,
-          s.salaireBase.toLocaleString("fr-FR"),
-          s.primes.toLocaleString("fr-FR"),
-          (s.montantHS || 0).toLocaleString("fr-FR"),
-          s.brutImposable.toLocaleString("fr-FR"),
-          s.cnpsSalarie.toLocaleString("fr-FR"),
-          s.cnpsPatronal.toLocaleString("fr-FR"),
-        ]
-      }),
-      foot: [[
-        "", "", "TOTAUX", "", "", "", "",
-        totalBrut.toLocaleString("fr-FR"),
-        totalSal.toLocaleString("fr-FR"),
-        totalPat.toLocaleString("fr-FR"),
-      ]],
-      headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold", fontSize: 8 },
-      footStyles: { fillColor: GREEN, textColor: 255, fontStyle: "bold", fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      alternateRowStyles: { fillColor: [245, 247, 250] as [number, number, number] },
-      columnStyles: {
-        0: { cellWidth: 8, halign: "center" },
-        4: { halign: "right" }, 5: { halign: "right" },
-        6: { halign: "right" }, 7: { halign: "right" },
-        8: { halign: "right" }, 9: { halign: "right" },
-      },
-    })
-
-    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10
-    doc.setFontSize(8); doc.setFont("helvetica", "bold")
-    doc.setTextColor(...NAVY)
-    doc.text(`Total CNPS salarié : ${totalSal.toLocaleString("fr-FR")} FCFA  ·  Total CNPS patronal : ${totalPat.toLocaleString("fr-FR")} FCFA  ·  Total à reverser : ${(totalSal + totalPat).toLocaleString("fr-FR")} FCFA`, 14, finalY)
-
-    doc.setFontSize(7); doc.setFont("helvetica", "italic")
-    doc.setTextColor(120, 120, 120)
-    doc.text("Document généré par Mon RH — SANOVIA Health Care. À conserver pour la déclaration mensuelle DS.", 14, finalY + 6)
-
-    doc.save(`CNPS_${MOIS[mois - 1]}_${annee}.pdf`)
-    toast.success("Déclaration CNPS exportée")
-  }
 
   function startEdit(s: Salaire) {
     setEditId(s.id)
@@ -358,13 +275,6 @@ export default function SalairesPage() {
               CSV
             </button>
           )}
-          <button
-            onClick={() => exportCNPS(currentMonth, currentYear)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border text-white"
-            style={{ background: "linear-gradient(135deg, #1a3461, #1e8bc0)", borderColor: "#1a3461" }}>
-            <Shield className="h-4 w-4" />
-            CNPS {MOIS[currentMonth - 1]}
-          </button>
           <button
             onClick={() => { setShowAvanceForm(p => !p); setActiveTab("avances") }}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100">
