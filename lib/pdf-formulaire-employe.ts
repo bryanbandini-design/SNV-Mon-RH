@@ -133,16 +133,6 @@ export async function genererFormulaireEmployePDF(entreprise: Entreprise) {
   // ── 3. Période d'essai ────────────────────────────────────────────────────
   sectionTitle("3 — PÉRIODE D'ESSAI")
 
-  doc.setFillColor(254, 243, 199)
-  doc.setDrawColor(253, 230, 138)
-  doc.setLineWidth(0.3)
-  doc.rect(mL, y - 3.5, cW, 9, "FD")
-  doc.setFontSize(8)
-  doc.setFont("helvetica", "normal")
-  doc.setTextColor(146, 64, 14)
-  doc.text("Un badge « Période d'essai » sera visible sur la fiche jusqu'à la date de fin.", mL + 2.5, y + 1.5)
-  y += 12
-
   doc.setDrawColor(100, 116, 139)
   doc.setLineWidth(0.3)
   doc.rect(mL, y - 3, 3.5, 3.5)
