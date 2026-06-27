@@ -34,7 +34,8 @@ export default function NouvelEmployePage() {
         rccm:    map.ENTREPRISE_RCCM    || "",
         niu:     map.ENTREPRISE_NIU     || "",
       })
-    } catch {
+    } catch (err) {
+      console.error("[PDF]", err)
       toast.error("Erreur lors de la génération du PDF")
     }
     setPdfLoading(false)
