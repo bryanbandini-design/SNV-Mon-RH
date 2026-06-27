@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { heureEnMinutes } from "@/lib/utils"
 
 export async function GET(req: Request) {
   const session = await auth()
@@ -48,17 +49,35 @@ export async function POST(req: Request) {
   })
   if (existing) return NextResponse.json({ message: "Un pointage existe déjà pour cette date" }, { status: 409 })
 
+  // Calcul heures et retard à la création
+  let heuresTravaillees: number | null = null
+  let minutesRetard = 0
+
+  if (data.heureArrivee && data.heureDepart) {
+    const debut = heureEnMinutes(data.heureArrivee)
+    const fin   = heureEnMinutes(data.heureDepart)
+    heuresTravaillees = Math.max(0, fin - debut) / 60
+  }
+
+  if (data.heureArrivee && data.heureReferenceDebut) {
+    const arrivee    = heureEnMinutes(data.heureArrivee)
+    const reference  = heureEnMinutes(data.heureReferenceDebut)
+    minutesRetard    = Math.max(0, arrivee - reference)
+  }
+
   const presence = await prisma.presence.create({
     data: {
       employeId,
-      date: new Date(dateStr + "T12:00:00"),
-      heureArrivee:    data.heureArrivee,
-      heureDepart:     data.heureDepart || null,
-      statut:          "PRESENT",
-      saisieManuelle:  true,
+      date:             new Date(dateStr + "T12:00:00"),
+      heureArrivee:     data.heureArrivee,
+      heureDepart:      data.heureDepart || null,
+      heuresTravaillees,
+      minutesRetard,
+      statut:           minutesRetard > 0 ? "RETARD" : "PRESENT",
+      saisieManuelle:   true,
       statutValidation: "EN_ATTENTE",
-      saisieParNom:    user?.name ?? null,
-      notes:           data.notes || null,
+      saisieParNom:     user?.name ?? null,
+      notes:            data.notes || null,
     },
   })
   return NextResponse.json(presence, { status: 201 })

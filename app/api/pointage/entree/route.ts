@@ -2,30 +2,16 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { logActivity } from "@/lib/activity-log"
 
-// POST /api/pointage/entree
-// Body: { employeId, faceScore }
-// La reconnaissance faciale se fait côté client avant d'appeler cette route
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}))
-    const { employeId, faceScore } = body as { employeId: string; faceScore?: number }
-
-    if (!employeId) {
-      return NextResponse.json({ error: "employeId requis" }, { status: 400 })
-    }
+    const { employeId } = await req.json().catch(() => ({})) as { employeId?: string }
+    if (!employeId) return NextResponse.json({ error: "employeId requis" }, { status: 400 })
 
     const employe = await prisma.employe.findUnique({ where: { id: employeId } })
-    if (!employe) {
-      return NextResponse.json({ error: "Employé introuvable" }, { status: 404 })
-    }
+    if (!employe) return NextResponse.json({ error: "Employé introuvable" }, { status: 404 })
 
     const pointage = await prisma.pointage.create({
-      data: {
-        employeId,
-        faceVerified: faceScore !== undefined ? faceScore < 0.5 : false,
-        faceScore,
-        statut: "EN_ATTENTE",
-      },
+      data: { employeId, statut: "EN_ATTENTE", source: "QR" },
     })
 
     await logActivity({
@@ -34,7 +20,7 @@ export async function POST(req: Request) {
       description: `Arrivée enregistrée : ${employe.prenom} ${employe.nom} à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`,
       entityId: pointage.id,
       entityType: "Pointage",
-      metadata: { faceScore, employeId },
+      metadata: { employeId },
     })
 
     return NextResponse.json({
@@ -48,12 +34,9 @@ export async function POST(req: Request) {
   }
 }
 
-// GET /api/pointage/entree — pointages du jour
 export async function GET() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(today.getDate() + 1)
+  const today    = new Date(); today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
 
   const pointages = await prisma.pointage.findMany({
     where: { dateEntree: { gte: today, lt: tomorrow } },
@@ -63,6 +46,5 @@ export async function GET() {
     },
     orderBy: { dateEntree: "desc" },
   })
-
   return NextResponse.json(pointages)
 }

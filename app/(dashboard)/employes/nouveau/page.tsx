@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Loader2, FlaskConical } from "lucide-react"
+import { ArrowLeft, Loader2, FlaskConical, Printer } from "lucide-react"
 import Link from "next/link"
 import { TYPES_CONTRAT } from "@/lib/utils"
 import { toast } from "sonner"
@@ -52,10 +52,16 @@ export default function NouvelEmployePage() {
         <Link href="/employes">
           <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-900">Nouvel employé</h1>
           <p className="text-slate-500 mt-0.5 text-sm">Créer la fiche d&apos;un nouvel employé</p>
         </div>
+        <Link href="/print/formulaire-employe" target="_blank">
+          <Button variant="outline" type="button" className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
+            <Printer className="h-4 w-4" />
+            Imprimer le formulaire
+          </Button>
+        </Link>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

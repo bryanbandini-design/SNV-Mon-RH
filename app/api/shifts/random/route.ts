@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const [employes, shifts] = await Promise.all([
     prisma.employe.findMany({
       where: { statut: "ACTIF" },
-      select: { id: true, utilisateur: { select: { role: true } } },
+      select: { id: true, prenom: true, nom: true, utilisateur: { select: { id: true, role: true } } },
     }),
     prisma.shift.findMany({ orderBy: { nom: "asc" } }),
   ])
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       employe: {
         select: {
           prenom: true, nom: true, poste: true,
-          utilisateur: { select: { role: true } },
+          utilisateur: { select: { id: true, role: true } },
         },
       },
       shift: true,
@@ -105,6 +105,57 @@ export async function POST(req: Request) {
   const nbShiftsSansResp = shifts.filter(s =>
     !result.some(a => a.shiftId === s.id && (a.employe.utilisateur?.role === "RESPONSABLE" || a.employe.utilisateur?.role === "ADMIN"))
   ).length
+
+  // Notifier tous les employés affectés
+  const debutLabel = from.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
+  const finLabel   = to.toLocaleDateString("fr-FR",   { day: "numeric", month: "long", year: "numeric" })
+
+  const notifications: {
+    userId: string; type: string; titre: string; message: string
+  }[] = []
+
+  for (const shift of shifts) {
+    const membres = result.filter(a => a.shiftId === shift.id)
+    const responsable = membres.find(
+      a => a.employe.utilisateur?.role === "RESPONSABLE" || a.employe.utilisateur?.role === "ADMIN"
+    )
+    const equipeNoms = membres
+      .filter(a => a.id !== responsable?.id)
+      .map(a => `${a.employe.prenom} ${a.employe.nom}`)
+
+    for (const aff of membres) {
+      const userId = aff.employe.utilisateur?.id
+      if (!userId) continue
+
+      const isResp = aff.employe.utilisateur?.role === "RESPONSABLE" || aff.employe.utilisateur?.role === "ADMIN"
+
+      if (isResp) {
+        const equipeStr = equipeNoms.length > 0
+          ? `Votre équipe : ${equipeNoms.join(", ")}.`
+          : "Vous êtes seul(e) sur ce shift."
+        notifications.push({
+          userId,
+          type:    "PLANNING_RESPONSABLE",
+          titre:   `Planning — Vous encadrez le ${shift.nom}`,
+          message: `Vous êtes responsable du ${shift.nom} (${shift.heureDebut}–${shift.heureFin}) du ${debutLabel} au ${finLabel}. ${equipeStr}`,
+        })
+      } else {
+        const respNom = responsable
+          ? `Responsable : ${responsable.employe.prenom} ${responsable.employe.nom}.`
+          : ""
+        notifications.push({
+          userId,
+          type:    "AFFECTATION_SHIFT",
+          titre:   `Planning — ${shift.nom}`,
+          message: `Vous êtes affecté(e) au ${shift.nom} (${shift.heureDebut}–${shift.heureFin}) du ${debutLabel} au ${finLabel}. ${respNom}`,
+        })
+      }
+    }
+  }
+
+  if (notifications.length > 0) {
+    await prisma.notification.createMany({ data: notifications })
+  }
 
   return NextResponse.json({ affectations: result, nbShiftsSansResp }, { status: 201 })
 }

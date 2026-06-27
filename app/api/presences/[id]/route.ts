@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { heureEnMinutes } from "@/lib/utils"
+import { creerRetenueProvisoire, calculerRetenueRetard } from "@/lib/retenues"
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -17,11 +18,59 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!["ADMIN", "RH", "RESPONSABLE"].includes(role)) {
       return NextResponse.json({ message: "Réservé au responsable ou à l'administrateur" }, { status: 403 })
     }
+
+    const existing = await prisma.presence.findUnique({ where: { id } })
+    if (!existing) return NextResponse.json({ message: "Non trouvé" }, { status: 404 })
+
+    // À la validation, recalculer heuresTravaillees si pas encore calculé
+    const updateData: Record<string, unknown> = {
+      statutValidation: data.action === "VALIDER" ? "VALIDEE" : "REJETEE",
+    }
+
+    if (data.action === "VALIDER" && existing.heureArrivee && existing.heureDepart && existing.heuresTravaillees === null) {
+      const debut = heureEnMinutes(existing.heureArrivee)
+      const fin   = heureEnMinutes(existing.heureDepart)
+      updateData.heuresTravaillees = Math.max(0, fin - debut) / 60
+    }
+
     const presence = await prisma.presence.update({
       where: { id },
-      data: { statutValidation: data.action === "VALIDER" ? "VALIDEE" : "REJETEE" },
-      include: { employe: { select: { prenom: true, nom: true, matricule: true, poste: true } } },
+      data:  updateData,
+      include: {
+        employe: { select: { prenom: true, nom: true, matricule: true, poste: true, salaireBase: true } },
+        retenueAbsence: true,
+      },
     })
+
+    // Créer retenue provisoire à la validation si pas déjà existante
+    if (data.action === "VALIDER" && !presence.retenueAbsence) {
+      if (existing.statut === "ABSENT") {
+        await creerRetenueProvisoire({
+          employeId: existing.employeId,
+          presenceId: id,
+          type: "ABSENCE",
+          date: existing.date,
+          montant: 5_000,
+          description: "Absence non justifiée",
+        })
+      } else if (existing.minutesRetard > 0) {
+        const montant = calculerRetenueRetard(
+          existing.minutesRetard,
+          presence.employe.salaireBase
+        )
+        if (montant > 0) {
+          await creerRetenueProvisoire({
+            employeId: existing.employeId,
+            presenceId: id,
+            type: "RETARD",
+            date: existing.date,
+            montant,
+            description: `${existing.minutesRetard} min de retard`,
+          })
+        }
+      }
+    }
+
     return NextResponse.json(presence)
   }
 

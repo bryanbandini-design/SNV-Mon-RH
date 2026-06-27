@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { heureEnMinutes } from "@/lib/utils"
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -18,11 +19,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (existing.statutValidation === "VALIDEE")
     return NextResponse.json({ message: "Ce pointage est déjà validé, impossible de le modifier" }, { status: 403 })
 
+  const heureArrivee = existing.heureArrivee
+  const heureDepart  = data.heureDepart ?? existing.heureDepart
+
+  // Recalcul des heures travaillées dès qu'on a arrivée + départ
+  let heuresTravaillees: number | null = existing.heuresTravaillees
+  if (heureArrivee && heureDepart) {
+    const debut = heureEnMinutes(heureArrivee)
+    const fin   = heureEnMinutes(heureDepart)
+    heuresTravaillees = Math.max(0, fin - debut) / 60
+  }
+
   const presence = await prisma.presence.update({
     where: { id },
     data: {
-      heureDepart: data.heureDepart ?? existing.heureDepart,
-      notes:       data.notes !== undefined ? (data.notes || null) : existing.notes,
+      heureDepart,
+      heuresTravaillees,
+      notes: data.notes !== undefined ? (data.notes || null) : existing.notes,
     },
   })
   return NextResponse.json(presence)

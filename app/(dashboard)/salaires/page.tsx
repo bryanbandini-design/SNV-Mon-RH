@@ -36,6 +36,11 @@ type Avance = {
   id: string; montant: number; date: string; motif: string | null; statut: string
   employe: { id: string; prenom: string; nom: string; matricule: string; poste: string }
 }
+type Retenue = {
+  id: string; type: string; date: string; montant: number; description: string; statut: string
+  employe: { id: string; prenom: string; nom: string; matricule: string; poste: string; salaireBase: number }
+  presence: { date: string; minutesRetard: number; statut: string } | null
+}
 
 const YEARS = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i)
 
@@ -51,12 +56,14 @@ const emptyAvanceForm = () => ({ employeId: "", montant: "", motif: "", date: ne
 export default function SalairesPage() {
   const [salaires, setSalaires] = useState<Salaire[]>([])
   const [employes, setEmployes] = useState<Employe[]>([])
-  const [avances,  setAvances]  = useState<Avance[]>([])
+  const [avances,   setAvances]   = useState<Avance[]>([])
+  const [retenues,  setRetenues]  = useState<Retenue[]>([])
+  const [retenueValidating, setRetenueValidating] = useState<string | null>(null)
   const [showForm, setShowForm]       = useState(false)
   const [showAvanceForm, setShowAvanceForm] = useState(false)
   const [avanceSaving, setAvanceSaving] = useState(false)
   const [avanceForm, setAvanceForm]   = useState(emptyAvanceForm())
-  const [activeTab, setActiveTab]     = useState<"fiches" | "avances">("fiches")
+  const [activeTab, setActiveTab]     = useState<"fiches" | "avances" | "retenues">("fiches")
   const [loading, setLoading]   = useState(false)
 
   const currentYear  = new Date().getFullYear()
@@ -76,7 +83,9 @@ export default function SalairesPage() {
       fetch("/api/salaires").then(r => r.ok ? r.json() : []),
       fetch("/api/employes").then(r => r.ok ? r.json() : []),
       fetch("/api/avances").then(r => r.ok ? r.json() : []),
-    ]).then(([s, e, a]) => {
+      fetch("/api/retenues").then(r => r.ok ? r.json() : []),
+    ]).then(([s, e, a, ret]) => {
+      if (Array.isArray(ret)) setRetenues(ret)
       if (Array.isArray(s)) setSalaires(s)
       if (Array.isArray(e)) setEmployes(e)
       if (Array.isArray(a)) setAvances(a)
@@ -223,6 +232,21 @@ export default function SalairesPage() {
       setSalaires(prev => prev.filter(s => s.id !== id))
       toast.success("Fiche supprimée")
     } else { toast.error("Erreur lors de la suppression") }
+  }
+
+  async function traiterRetenue(id: string, action: "VALIDER" | "ANNULER") {
+    setRetenueValidating(id)
+    const res = await fetch(`/api/retenues/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setRetenues(prev => prev.map(r => r.id === id ? { ...r, statut: updated.statut } : r))
+      toast.success(action === "VALIDER" ? "Retenue validée" : "Retenue annulée")
+    } else { toast.error("Erreur") }
+    setRetenueValidating(null)
   }
 
   // Filtres
@@ -509,10 +533,19 @@ export default function SalairesPage() {
 
       {/* Onglets */}
       <div className="flex gap-1 border-b border-slate-200">
-        {(["fiches", "avances"] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-            {tab === "fiches" ? `Fiches de paie (${salaires.length})` : `Avances (${avances.filter(a => a.statut !== "DEDUITE").length})`}
+        {([
+          { key: "fiches",   label: `Fiches de paie (${salaires.length})` },
+          { key: "avances",  label: `Avances (${avances.filter(a => a.statut !== "DEDUITE").length})` },
+          { key: "retenues", label: `Retenues`, badge: retenues.filter(r => r.statut === "EN_ATTENTE").length },
+        ] as const).map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={`relative px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.key ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            {tab.label}
+            {"badge" in tab && tab.badge > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black">
+                {tab.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -582,6 +615,99 @@ export default function SalairesPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Onglet Retenues ── */}
+      {activeTab === "retenues" && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500" />
+                <span className="font-semibold text-slate-900 text-sm">Retenues absences &amp; retards</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400 inline-block" /> En attente : {retenues.filter(r => r.statut === "EN_ATTENTE").length}</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Validées : {retenues.filter(r => r.statut === "VALIDEE").length}</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300 inline-block" /> Annulées : {retenues.filter(r => r.statut === "ANNULEE").length}</span>
+              </div>
+            </div>
+
+            {retenues.length === 0 ? (
+              <div className="text-center py-14 text-slate-400">
+                <Check className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">Aucune retenue enregistrée</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {retenues.map(r => {
+                  const dateLabel = new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })
+                  const isPending = r.statut === "EN_ATTENTE"
+                  return (
+                    <div key={r.id} className={`px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${isPending ? "bg-amber-50/40" : ""}`}>
+                      <div className="flex items-start gap-3 min-w-0">
+                        {/* Badge type */}
+                        <div className={`flex-shrink-0 h-9 w-9 rounded-xl flex items-center justify-center ${r.type === "ABSENCE" ? "bg-red-100" : "bg-orange-100"}`}>
+                          <AlertCircle className={`h-4 w-4 ${r.type === "ABSENCE" ? "text-red-500" : "text-orange-500"}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                            <p className="text-sm font-semibold text-slate-900">{r.employe.prenom} {r.employe.nom}</p>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.type === "ABSENCE" ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"}`}>
+                              {r.type === "ABSENCE" ? "Absence" : "Retard"}
+                            </span>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              r.statut === "EN_ATTENTE" ? "bg-amber-100 text-amber-700" :
+                              r.statut === "VALIDEE"    ? "bg-emerald-100 text-emerald-700" :
+                              "bg-slate-100 text-slate-500"
+                            }`}>
+                              {r.statut === "EN_ATTENTE" ? "En attente" : r.statut === "VALIDEE" ? "Validée" : "Annulée"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 capitalize">{dateLabel} · {r.employe.poste}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{r.description}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right">
+                          <p className="text-base font-black text-red-600">−{r.montant.toLocaleString("fr-FR")} FCFA</p>
+                          <p className="text-[10px] text-slate-400">retenue</p>
+                        </div>
+                        {isPending && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => traiterRetenue(r.id, "VALIDER")}
+                              disabled={retenueValidating === r.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors">
+                              {retenueValidating === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                              Confirmer
+                            </button>
+                            <button onClick={() => traiterRetenue(r.id, "ANNULER")}
+                              disabled={retenueValidating === r.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 disabled:opacity-50 transition-colors">
+                              {retenueValidating === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                              Annuler
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {retenues.filter(r => r.statut === "EN_ATTENTE").length > 0 && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">{retenues.filter(r => r.statut === "EN_ATTENTE").length} retenue(s) en attente</span> de votre validation.
+                Les retenues validées seront intégrées dans le champ &ldquo;Retenues&rdquo; lors de la génération du prochain bulletin de salaire.
+              </p>
             </div>
           )}
         </div>

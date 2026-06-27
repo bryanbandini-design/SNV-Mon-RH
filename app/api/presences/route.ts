@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { heureEnMinutes } from "@/lib/utils"
+import { creerRetenueProvisoire, calculerRetenueRetard } from "@/lib/retenues"
 
 export async function GET(req: Request) {
   const session = await auth()
@@ -77,6 +78,36 @@ export async function POST(req: Request) {
       motifManuel: data.motifManuel || null,
     },
   })
+
+  // Retenue provisoire automatique
+  if (statut === "ABSENT") {
+    await creerRetenueProvisoire({
+      employeId: data.employeId,
+      presenceId: presence.id,
+      type: "ABSENCE",
+      date: new Date(data.date),
+      montant: 5_000,
+      description: "Absence non justifiée",
+    })
+  } else if (minutesRetard > 0) {
+    const employe = await prisma.employe.findUnique({
+      where: { id: data.employeId },
+      select: { salaireBase: true },
+    })
+    if (employe) {
+      const montant = calculerRetenueRetard(minutesRetard, employe.salaireBase)
+      if (montant > 0) {
+        await creerRetenueProvisoire({
+          employeId: data.employeId,
+          presenceId: presence.id,
+          type: "RETARD",
+          date: new Date(data.date),
+          montant,
+          description: `${minutesRetard} min de retard`,
+        })
+      }
+    }
+  }
 
   return NextResponse.json(presence, { status: 201 })
 }

@@ -11,7 +11,6 @@ import {
 import { AttestationButtons } from "@/components/employes/attestation-buttons"
 import { formatDate, formatCurrency, MOIS } from "@/lib/utils"
 import { CompteAccessPanel } from "@/components/employes/compte-access-panel"
-import { FaceEnrollButton } from "@/components/employes/face-enroll-button"
 
 export default async function EmployePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -88,7 +87,6 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
         </Link>
         <div className="flex items-center gap-2 flex-wrap">
           <AttestationButtons employeId={employe.id} />
-          <FaceEnrollButton employeId={employe.id} hasFace={!!employe.faceDescriptor} />
           <Link href={`/employes/${employe.id}/modifier`}>
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <Edit className="h-4 w-4" />

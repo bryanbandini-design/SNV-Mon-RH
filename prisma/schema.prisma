@@ -72,6 +72,7 @@ model Employe {
   utilisateur            User?
   formations             ParticipationFormation[]
   avances                AvanceSalaire[]
+  retenuesAbsence        RetenueAbsence[]
 }
 
 // ─── CONGÉS ────────────────────────────────────────────────────────────────
@@ -382,7 +383,25 @@ model Presence {
   motifManuel       String?  // motif de la saisie manuelle
   createdAt         DateTime @default(now())
 
-  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  employe        Employe         @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  retenueAbsence RetenueAbsence?
+}
+
+// ─── RETENUES ABSENCE / RETARD ─────────────────────────────────────────────
+
+model RetenueAbsence {
+  id          String   @id @default(cuid())
+  employeId   String
+  presenceId  String?  @unique
+  type        String   // ABSENCE | RETARD
+  date        DateTime
+  montant     Float    // FCFA
+  description String
+  statut      String   @default("EN_ATTENTE") // EN_ATTENTE | VALIDEE | ANNULEE
+  createdAt   DateTime @default(now())
+
+  employe  Employe   @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  presence Presence? @relation(fields: [presenceId], references: [id], onDelete: SetNull)
 }
 
 // ─── MODULE POINTAGE QR + FACIAL + ZKTECO ─────────────────────────────────

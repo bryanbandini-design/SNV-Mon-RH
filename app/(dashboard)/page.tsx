@@ -4,7 +4,7 @@ import { auth } from "@/auth"
 import {
   Users, Calendar, AlertTriangle, DollarSign, Clock,
   FlaskConical, Plus, ArrowRight, TrendingUp, UserCheck,
-  CheckCircle, AlertCircle, ScanLine, ChevronRight, FileWarning, Timer,
+  CheckCircle, AlertCircle, ChevronRight, FileWarning, Timer,
 } from "lucide-react"
 import { formatCurrency, formatDate, MOIS } from "@/lib/utils"
 import { DashboardCharts } from "@/components/dashboard/charts"
@@ -32,7 +32,6 @@ export default async function DashboardPage() {
     // Données "À faire"
     congesDetail,
     dossiersDelaiDepasse,
-    pointagesFaceEchec,
     totalEmployes,
     cddExpirant,
     pointagesManuelsCount,
@@ -72,8 +71,6 @@ export default async function DashboardPage() {
       take: 3,
       include: { employe: { select: { prenom: true, nom: true } } },
     }),
-    // Pointages face_echec aujourd'hui
-    prisma.pointage.count({ where: { statut: "FACE_ECHEC", dateEntree: { gte: todayStart, lt: todayEnd } } }),
     // Pour calculer fiches manquantes
     prisma.employe.count({ where: { statut: "ACTIF" } }),
     // CDD expirant dans les 30 jours
@@ -137,7 +134,7 @@ export default async function DashboardPage() {
   // Total d'actions à traiter
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = (session?.user as any)?.role as string | undefined
-  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + (pointagesFaceEchec > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length + (pointagesManuelsCount > 0 ? 1 : 0)
+  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length + (pointagesManuelsCount > 0 ? 1 : 0)
 
   const kpis = [
     { label: "Employés actifs",    value: totalActifs.toString(),
@@ -350,30 +347,6 @@ export default async function DashboardPage() {
               </div>
             )}
 
-            {/* Pointages face_echec */}
-            {pointagesFaceEchec > 0 && (
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <ScanLine className="h-4 w-4" style={{ color: "#22d3ee" }} />
-                    <span className="text-xs font-semibold text-slate-700">Face non confirmée</span>
-                  </div>
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: "rgba(34,211,238,0.1)", color: "#0891b2" }}>
-                    {pointagesFaceEchec}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  <span className="font-semibold text-slate-800">{pointagesFaceEchec} pointage(s)</span> avec
-                  échec de reconnaissance faciale à corriger manuellement.
-                </p>
-                <Link href="/pointage"
-                  className="mt-3 flex items-center gap-1 text-xs font-semibold"
-                  style={{ color: "#0891b2" }}>
-                  Corriger <ChevronRight className="h-3 w-3" />
-                </Link>
-              </div>
-            )}
 
             {/* Essais expirant */}
             {essaisExpiration > 0 && (

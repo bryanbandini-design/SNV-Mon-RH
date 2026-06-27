@@ -54,18 +54,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Champs requis manquants" }, { status: 400 })
   }
 
+  const from = new Date(dateDebut + "T00:00:00")
+  const to   = new Date(dateFin   + "T23:59:59")
+
   const affectation = await prisma.affectationShift.create({
-    data: {
-      employeId,
-      shiftId,
-      dateDebut: new Date(dateDebut + "T00:00:00"),
-      dateFin:   new Date(dateFin   + "T23:59:59"),
-    },
+    data: { employeId, shiftId, dateDebut: from, dateFin: to },
     include: {
-      employe: { select: { id: true, prenom: true, nom: true, poste: true } },
-      shift:   true,
+      employe: {
+        select: {
+          id: true, prenom: true, nom: true, poste: true,
+          utilisateur: { select: { id: true, role: true } },
+        },
+      },
+      shift: true,
     },
   })
+
+  // Notifier l'employé de son affectation
+  const userId = affectation.employe.utilisateur?.id
+  if (userId) {
+    const role       = affectation.employe.utilisateur?.role
+    const isResp     = role === "RESPONSABLE" || role === "ADMIN"
+    const debutLabel = from.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
+    const finLabel   = to.toLocaleDateString("fr-FR",   { day: "numeric", month: "long", year: "numeric" })
+
+    await prisma.notification.create({
+      data: {
+        userId,
+        type:    "AFFECTATION_SHIFT",
+        titre:   isResp
+          ? `Vous encadrez le ${affectation.shift.nom}`
+          : `Affectation — ${affectation.shift.nom}`,
+        message: isResp
+          ? `Vous êtes désigné(e) responsable du ${affectation.shift.nom} (${affectation.shift.heureDebut}–${affectation.shift.heureFin}) du ${debutLabel} au ${finLabel}.`
+          : `Vous êtes affecté(e) au ${affectation.shift.nom} (${affectation.shift.heureDebut}–${affectation.shift.heureFin}) du ${debutLabel} au ${finLabel}.`,
+      },
+    })
+  }
 
   return NextResponse.json(affectation, { status: 201 })
 }

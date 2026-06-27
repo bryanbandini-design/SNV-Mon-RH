@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DollarSign, Printer } from "lucide-react"
+import { DollarSign, Printer, AlertCircle } from "lucide-react"
 import { formatCurrency, MOIS } from "@/lib/utils"
 
 type Employe = { prenom: string; nom: string; matricule: string; poste: string; salaireBase: number }
@@ -10,17 +10,24 @@ type Salaire = {
   salaireBase: number; primes: number; retenues: number; netAPayer: number
   statut: string; datePaiement: string | null; notes: string | null
 }
+type Retenue = {
+  id: string; type: string; date: string; montant: number; description: string; statut: string
+  presence: { minutesRetard: number; statut: string } | null
+}
 
 export default function MesSalairesPage() {
   const [employe,  setEmploye]  = useState<Employe | null>(null)
   const [salaires, setSalaires] = useState<Salaire[]>([])
+  const [retenues, setRetenues] = useState<Retenue[]>([])
 
   useEffect(() => {
-    fetch("/api/mon-espace/salaires")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) { setEmploye(data.employe); setSalaires(data.salaires) }
-      })
+    Promise.all([
+      fetch("/api/mon-espace/salaires").then(r => r.ok ? r.json() : null),
+      fetch("/api/mon-espace/retenues").then(r => r.ok ? r.json() : []),
+    ]).then(([data, ret]) => {
+      if (data) { setEmploye(data.employe); setSalaires(data.salaires) }
+      if (Array.isArray(ret)) setRetenues(ret)
+    })
   }, [])
 
   function handleDownload(s: Salaire) {
@@ -54,6 +61,49 @@ export default function MesSalairesPage() {
           </div>
         ))}
       </div>
+
+      {/* Retenues */}
+      {retenues.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-red-100 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-500" />
+            <p className="font-semibold text-slate-900 text-sm">Retenues absences &amp; retards</p>
+            {retenues.some(r => r.statut === "EN_ATTENTE") && (
+              <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                {retenues.filter(r => r.statut === "EN_ATTENTE").length} en attente de validation
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-slate-50">
+            {retenues.map(r => {
+              const dateLabel = new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+              return (
+                <div key={r.id} className="flex items-center gap-4 px-6 py-4">
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${r.type === "ABSENCE" ? "bg-red-100" : "bg-orange-100"}`}>
+                    <AlertCircle className={`h-4 w-4 ${r.type === "ABSENCE" ? "text-red-500" : "text-orange-500"}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {r.type === "ABSENCE" ? "Absence" : "Retard"} · {dateLabel}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">{r.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-base font-black text-red-600">−{r.montant.toLocaleString("fr-FR")} FCFA</p>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      r.statut === "EN_ATTENTE" ? "bg-amber-100 text-amber-700" :
+                      r.statut === "VALIDEE"    ? "bg-red-100 text-red-700" :
+                      "bg-slate-100 text-slate-500"
+                    }`}>
+                      {r.statut === "EN_ATTENTE" ? "En attente" : r.statut === "VALIDEE" ? "Confirmée" : "Annulée"}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Liste des bulletins */}
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
