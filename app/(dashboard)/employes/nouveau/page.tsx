@@ -25,8 +25,8 @@ export default function NouvelEmployePage() {
     setPdfLoading(true)
     try {
       const res = await fetch("/api/parametres")
-      const params: { cle: string; valeur: string }[] = res.ok ? await res.json() : []
-      const map = Object.fromEntries(params.map((p) => [p.cle, p.valeur]))
+      const data = res.ok ? await res.json() : {}
+      const map: Record<string, string> = data.params ?? {}
       const mod = await import("@/lib/pdf-formulaire-employe")
       await mod.genererFormulaireEmployePDF({
         nom:     map.ENTREPRISE_NOM     || "Mon Entreprise",
