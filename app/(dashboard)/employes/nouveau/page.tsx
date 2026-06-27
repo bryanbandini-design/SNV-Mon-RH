@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Loader2, FlaskConical, Printer } from "lucide-react"
+import { ArrowLeft, Loader2, FlaskConical, Download } from "lucide-react"
 import Link from "next/link"
 import { TYPES_CONTRAT } from "@/lib/utils"
 import { toast } from "sonner"
@@ -16,9 +16,29 @@ import { toast } from "sonner"
 export default function NouvelEmployePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
   const [periodeEssai, setPeriodeEssai] = useState(false)
   const [typeContrat, setTypeContrat] = useState("")
   const [dateEmbauche, setDateEmbauche] = useState("")
+
+  async function telechargerFormulaire() {
+    setPdfLoading(true)
+    try {
+      const res = await fetch("/api/parametres")
+      const params: { cle: string; valeur: string }[] = res.ok ? await res.json() : []
+      const map = Object.fromEntries(params.map((p) => [p.cle, p.valeur]))
+      const { genererFormulaireEmployePDF } = await import("@/lib/pdf-formulaire-employe")
+      await genererFormulaireEmployePDF({
+        nom:     map.ENTREPRISE_NOM     || "Mon Entreprise",
+        adresse: map.ENTREPRISE_ADRESSE || "",
+        rccm:    map.ENTREPRISE_RCCM    || "",
+        niu:     map.ENTREPRISE_NIU     || "",
+      })
+    } catch {
+      toast.error("Erreur lors de la génération du PDF")
+    }
+    setPdfLoading(false)
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -56,12 +76,10 @@ export default function NouvelEmployePage() {
           <h1 className="text-2xl font-bold text-slate-900">Nouvel employé</h1>
           <p className="text-slate-500 mt-0.5 text-sm">Créer la fiche d&apos;un nouvel employé</p>
         </div>
-        <Link href="/print/formulaire-employe" target="_blank">
-          <Button variant="outline" type="button" className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
-            <Printer className="h-4 w-4" />
-            Imprimer le formulaire
-          </Button>
-        </Link>
+        <Button variant="outline" type="button" onClick={telechargerFormulaire} disabled={pdfLoading} className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
+          {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Télécharger le formulaire
+        </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
