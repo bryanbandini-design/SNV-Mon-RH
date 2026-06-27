@@ -27,16 +27,17 @@ export default function NouvelEmployePage() {
       const res = await fetch("/api/parametres")
       const params: { cle: string; valeur: string }[] = res.ok ? await res.json() : []
       const map = Object.fromEntries(params.map((p) => [p.cle, p.valeur]))
-      const { genererFormulaireEmployePDF } = await import("@/lib/pdf-formulaire-employe")
-      await genererFormulaireEmployePDF({
+      const mod = await import("@/lib/pdf-formulaire-employe")
+      await mod.genererFormulaireEmployePDF({
         nom:     map.ENTREPRISE_NOM     || "Mon Entreprise",
         adresse: map.ENTREPRISE_ADRESSE || "",
         rccm:    map.ENTREPRISE_RCCM    || "",
         niu:     map.ENTREPRISE_NIU     || "",
       })
-    } catch (err) {
-      console.error("[PDF]", err)
-      toast.error("Erreur lors de la génération du PDF")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[PDF erreur]", err)
+      toast.error(`PDF : ${msg}`)
     }
     setPdfLoading(false)
   }

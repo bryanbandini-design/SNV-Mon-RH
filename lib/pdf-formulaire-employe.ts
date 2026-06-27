@@ -1,5 +1,3 @@
-"use client"
-
 import { TYPES_CONTRAT } from "@/lib/utils"
 
 type Entreprise = { nom: string; adresse: string; rccm: string; niu: string }
