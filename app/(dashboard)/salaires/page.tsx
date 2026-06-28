@@ -42,7 +42,7 @@ type Retenue = {
   presence: { date: string; minutesRetard: number; statut: string } | null
 }
 
-const YEARS = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i)
+const YEARS = Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - 4 + i)
 
 function initiales(e: { prenom: string; nom: string }) { return e.prenom[0] + e.nom[0] }
 
@@ -61,6 +61,8 @@ export default function SalairesPage() {
   const [retenueValidating, setRetenueValidating] = useState<string | null>(null)
   const [showForm, setShowForm]       = useState(false)
   const [showAvanceForm, setShowAvanceForm] = useState(false)
+  const [rattrapageMois,  setRattrapageMois]  = useState(() => String(new Date().getMonth() + 1))
+  const [rattrapageAnnee, setRattrapageAnnee] = useState(() => String(new Date().getFullYear()))
   const [avanceSaving, setAvanceSaving] = useState(false)
   const [avanceForm, setAvanceForm]   = useState(emptyAvanceForm())
   const [activeTab, setActiveTab]     = useState<"fiches" | "avances" | "retenues">("fiches")
@@ -261,11 +263,13 @@ export default function SalairesPage() {
   const hasFiltre = filtreMois !== "TOUS" || filtreAnnee !== "TOUS" || filtreEmp !== "TOUS" || filtreStatut !== "TOUS"
   const enAttente  = salaires.filter(s => s.statut === "EN_ATTENTE")
 
-  // Employés sans fiche pour le mois courant
-  const idsAvecFicheCeMois = new Set(
-    salaires.filter(s => s.mois === currentMonth && s.annee === currentYear).map(s => s.employe.id)
+  // Employés sans fiche pour la période de rattrapage sélectionnée
+  const rMois  = parseInt(rattrapageMois)
+  const rAnnee = parseInt(rattrapageAnnee)
+  const idsAvecFichePeriode = new Set(
+    salaires.filter(s => s.mois === rMois && s.annee === rAnnee).map(s => s.employe.id)
   )
-  const employesSansFiche = employes.filter(e => e.statut === "ACTIF" && !idsAvecFicheCeMois.has(e.id))
+  const employesSansFiche = employes.filter(e => e.statut === "ACTIF" && !idsAvecFichePeriode.has(e.id))
   const netPending = enAttente.reduce((a, s) => a + s.netAPayer, 0)
   const netPaye    = salaires.filter(s => s.statut === "PAYE").reduce((a, s) => a + s.netAPayer, 0)
   const netTotal   = salaires.reduce((a, s) => a + s.netAPayer, 0)
@@ -362,22 +366,40 @@ export default function SalairesPage() {
         </div>
       </div>
 
-      {/* Bandeau fiches manquantes */}
-      {employesSansFiche.length > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 px-4 py-3.5"
-          style={{ background: "#fffbeb" }}>
-          <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-amber-800">
-              {employesSansFiche.length} employé(s) sans fiche pour {MOIS[currentMonth - 1]} {currentYear}
-            </p>
-            <div className="flex flex-wrap gap-1.5 mt-2">
+      {/* Bandeau rattrapage / fiches manquantes */}
+      <div className="rounded-xl border border-amber-200 px-4 py-4" style={{ background: "#fffbeb" }}>
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <p className="text-sm font-semibold text-amber-800 flex-1">Fiches manquantes — période de rattrapage</p>
+          <div className="flex items-center gap-2">
+            <Select value={rattrapageMois} onValueChange={setRattrapageMois}>
+              <SelectTrigger className="h-8 text-xs w-32 bg-white border-amber-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>{MOIS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={rattrapageAnnee} onValueChange={setRattrapageAnnee}>
+              <SelectTrigger className="h-8 text-xs w-24 bg-white border-amber-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>{YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+        {employesSansFiche.length === 0 ? (
+          <p className="text-xs text-emerald-700 font-medium">
+            ✓ Tous les employés actifs ont une fiche pour {MOIS[rMois - 1]} {rAnnee}.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-1.5">
               {employesSansFiche.map(e => (
                 <button key={e.id}
                   onClick={() => {
                     setEditId(null)
-                    setForm({ employeId: e.id, mois: String(currentMonth), annee: String(currentYear), salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "", heuresSupplementaires: "0", tauxHS: "NORMAL" })
+                    setForm({ employeId: e.id, mois: rattrapageMois, annee: rattrapageAnnee, salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "", heuresSupplementaires: "0", tauxHS: "NORMAL" })
                     setShowForm(true)
+                    setActiveTab("fiches")
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }}
                   className="text-xs px-2.5 py-1 rounded-full font-medium border transition-colors hover:border-amber-400"
@@ -387,11 +409,11 @@ export default function SalairesPage() {
               ))}
             </div>
             <p className="text-xs text-amber-600 mt-2">
-              Cliquez sur un nom pour pré-remplir le formulaire.
+              {employesSansFiche.length} employé(s) sans fiche pour {MOIS[rMois - 1]} {rAnnee} — cliquez sur un nom pour pré-remplir.
             </p>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* Summary cards */}
       {salaires.length > 0 && (
