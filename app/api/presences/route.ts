@@ -61,6 +61,9 @@ export async function POST(req: Request) {
   const statut = data.statut ?? (minutesRetard > 0 ? "RETARD" : "PRESENT")
 
   const isManuel = data.saisieManuelle === true
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const role = (session.user as any)?.role as string | undefined
+  const isAdminOrRH = role === "ADMIN" || role === "RH"
 
   const presence = await prisma.presence.create({
     data: {
@@ -73,7 +76,8 @@ export async function POST(req: Request) {
       statut,
       notes: data.notes || null,
       saisieManuelle: isManuel,
-      statutValidation: isManuel ? "EN_ATTENTE" : "VALIDEE",
+      // Admin/RH : validation automatique (rattrapage de données)
+      statutValidation: isAdminOrRH ? "VALIDEE" : (isManuel ? "EN_ATTENTE" : "VALIDEE"),
       saisieParNom: data.saisieParNom || null,
       motifManuel: data.motifManuel || null,
     },

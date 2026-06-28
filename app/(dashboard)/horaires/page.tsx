@@ -51,6 +51,7 @@ const TABS = [
 ] as const
 
 const MOTIFS_MANUEL = [
+  "Rattrapage de données",
   "Panne de courant",
   "Panne système pointage",
   "Terminal QR hors service",
@@ -161,7 +162,7 @@ export default function HorairesPage() {
   const [validating, setValidating] = useState<string | null>(null)
   const [formManuel, setFormManuel] = useState({
     employeId: "", date: new Date().toISOString().split("T")[0],
-    heureArrivee: "", heureDepart: "", motifManuel: "Panne de courant", notes: "",
+    heureArrivee: "", heureDepart: "", motifManuel: "Rattrapage de données", notes: "",
   })
   const [savingManuel, setSavingManuel] = useState(false)
 
@@ -269,7 +270,7 @@ export default function HorairesPage() {
       const p = await res.json()
       const emp = employes.find(x => x.id === formManuel.employeId)
       setSaisiesManuelle(prev => [{ ...p, employe: emp! }, ...prev])
-      setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", motifManuel: "Panne de courant", notes: "" })
+      setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", motifManuel: "Rattrapage de données", notes: "" })
       toast.success("Saisie soumise — en attente de validation administrateur")
     } else { toast.error("Erreur lors de la soumission") }
     setSavingManuel(false)
@@ -789,11 +790,14 @@ export default function HorairesPage() {
         <div className="space-y-6">
 
           {/* Bandeau info */}
-          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <Zap className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-amber-800">
-              <p className="font-semibold">Saisie manuelle des horaires</p>
-              <p className="text-xs mt-0.5 text-amber-700">En cas de panne de courant ou de défaillance du système de pointage. Les saisies doivent être validées par l&apos;administrateur avant d&apos;être comptabilisées.</p>
+          <div className="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <Zap className="h-4 w-4 text-indigo-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-indigo-800">
+              <p className="font-semibold">Saisie administrative — rattrapage & corrections</p>
+              <p className="text-xs mt-0.5 text-indigo-700">
+                Vous pouvez saisir des présences pour <strong>n&apos;importe quelle date passée</strong> (rattrapage de données, panne système, correction).
+                En tant qu&apos;administrateur, les saisies sont <strong>validées automatiquement</strong> et immédiatement comptabilisées dans les heures de travail.
+              </p>
             </div>
           </div>
 
@@ -842,7 +846,7 @@ export default function HorairesPage() {
                   className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
                   style={{ background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
                   {savingManuel ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenLine className="h-4 w-4" />}
-                  Soumettre pour validation
+                  Enregistrer la présence
                 </button>
               </div>
             </form>
