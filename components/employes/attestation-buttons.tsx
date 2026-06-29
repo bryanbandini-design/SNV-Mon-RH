@@ -183,48 +183,62 @@ async function genererAttestation(employeId: string, type: "TRAVAIL" | "SALAIRE"
         ` s'élève à ${montant(employe.derSalaire.netAPayer)} FCFA.`
       )
     }
+    skip(5)
+    write("Il/Elle n'est redevable d'aucun arriéré de salaire à ce jour.")
   }
 
   skip(8)
   write("La présente attestation est délivrée à l'intéressé(e) pour faire valoir ce que de droit.", { italic: true })
 
-  // ── ZONE SIGNATURE ────────────────────────────────────────────────────────
-  skip(20)
+  // ── ZONE SIGNATURES (deux colonnes) ─────────────────────────────────────
+  skip(15)
 
-  // Gauche : Fait à
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9.5)
-  doc.setTextColor(...GRAY)
-  doc.text(`Fait à _______________, le ${dateEdition}`, ML, y, { align: "left" })
+  doc.setDrawColor(200, 213, 225); doc.setLineWidth(0.4)
+  doc.line(ML, y, W - MR, y)
 
-  // Droite : bloc signature
-  const SX = W - MR
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(9.5)
-  doc.setTextColor(...NAVY)
-  doc.text("Signature et cachet :", SX, y, { align: "right" })
+  const ySigTop = y + 6
+  const colW    = (TW - 10) / 2
+  const colRX   = ML + colW + 10
 
-  y += lh(9.5) + 2
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9.5)
-  doc.setTextColor(...SLATE)
-  doc.text(dirigeant, SX, y, { align: "right" })
+  // ── Colonne gauche : Employeur ──
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...NAVY)
+  doc.text("L'EMPLOYEUR", ML, ySigTop)
 
-  y += lh(9)
-  doc.setFont("helvetica", "italic")
-  doc.setFontSize(8.5)
-  doc.setTextColor(...GRAY)
-  doc.text("Représentant légal", SX, y, { align: "right" })
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...GRAY)
+  doc.text(`Fait a _______________, le ${dateEdition}`, ML, ySigTop + 5.5)
 
-  // Ligne pour la signature de l'employé
-  const lineY = y + 20
-  doc.setDrawColor(200, 213, 225)
-  doc.setLineWidth(0.3)
-  doc.line(W / 2 + 4, lineY, W - MR, lineY)
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(7.5)
-  doc.setTextColor(...GRAY)
-  doc.text("Date et signature", W / 2 + 4, lineY + 4, { align: "left" })
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...SLATE)
+  doc.text(dirigeant, ML, ySigTop + 12)
+
+  doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(...GRAY)
+  doc.text("Representant legal", ML, ySigTop + 17)
+
+  doc.setDrawColor(200, 213, 225); doc.setLineWidth(0.3)
+  doc.line(ML, ySigTop + 28, ML + colW, ySigTop + 28)
+
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...GRAY)
+  doc.text("Signature et cachet", ML, ySigTop + 32)
+
+  // ── Colonne droite : Salarié ──
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...NAVY)
+  doc.text("LE SALARIE", colRX, ySigTop)
+
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...GRAY)
+  doc.text("Lu et approuve par le salarie :", colRX, ySigTop + 5.5)
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...SLATE)
+  doc.text(`${employe.prenom} ${employe.nom}`, colRX, ySigTop + 12)
+
+  doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(...GRAY)
+  doc.text("Signe le : _____ / _____ / _______", colRX, ySigTop + 17)
+
+  doc.setDrawColor(200, 213, 225); doc.setLineWidth(0.3)
+  doc.line(colRX, ySigTop + 28, colRX + colW, ySigTop + 28)
+
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...GRAY)
+  doc.text("Lu, approuve et recu", colRX, ySigTop + 32)
+
+  y = ySigTop + 36
 
   // ── PIED DE PAGE ──────────────────────────────────────────────────────────
   const FOOT_H = 18
