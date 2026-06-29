@@ -12,7 +12,7 @@ import {
 import { formatCurrency, MOIS } from "@/lib/utils"
 import { toast } from "sonner"
 import { calculerSalaire, calculerHS, CAMEROUN, formatFCFA, type DetailsSalaire, type TauxHS } from "@/lib/cameroun-salaire"
-import { calculerRetenueAbsence, calculerRetenueRetard } from "@/lib/retenues"
+import { calculerRetenueAbsence, calculerRetenueRetard } from "@/lib/retenues-calcul"
 
 function downloadCSV(rows: (string | number)[][], filename: string) {
   const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
