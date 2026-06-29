@@ -22,6 +22,20 @@ export default async function BulletinPrintPage({ params }: { params: Promise<{ 
 
   if (!salaire) notFound()
 
+  // Premier et dernier bulletin payé pour cet employé (pour l'attestation)
+  const [firstPaid, lastPaid] = await Promise.all([
+    prisma.historiqueSalaire.findFirst({
+      where:   { employeId: salaire.employeId, statut: "PAYE" },
+      orderBy: [{ annee: "asc" }, { mois: "asc" }],
+      select:  { mois: true, annee: true },
+    }),
+    prisma.historiqueSalaire.findFirst({
+      where:   { employeId: salaire.employeId, statut: "PAYE" },
+      orderBy: [{ annee: "desc" }, { mois: "desc" }],
+      select:  { mois: true, annee: true },
+    }),
+  ])
+
   const params_map: Record<string, string> = Object.fromEntries(parametres.map(r => [r.cle, r.valeur]))
   const entreprise = {
     nom:       params_map.ENTREPRISE_NOM       || "Mon Entreprise",
@@ -66,6 +80,8 @@ export default async function BulletinPrintPage({ params }: { params: Promise<{ 
       calc={calc}
       baseCNPS={baseCNPS}
       genereLe={new Date().toLocaleDateString("fr-FR")}
+      firstPaid={firstPaid ?? undefined}
+      lastPaid={lastPaid ?? undefined}
     />
   )
 }

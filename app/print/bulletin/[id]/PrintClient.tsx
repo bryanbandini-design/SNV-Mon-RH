@@ -51,6 +51,8 @@ type Props = {
   calc:         DetailsSalaire
   baseCNPS:     number
   genereLe:     string
+  firstPaid?:   { mois: number; annee: number }
+  lastPaid?:    { mois: number; annee: number }
 }
 
 async function loadImageAsBase64(url: string): Promise<string> {
@@ -64,9 +66,12 @@ async function loadImageAsBase64(url: string): Promise<string> {
   })
 }
 
+const MOIS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]
+
 export default function PrintClient(props: Props) {
   const { moisLib, annee, isPaye, datePaiement, notes, employe, entreprise,
-          salaireBase, primes, retenues, heuresSupplementaires, montantHS, avanceDeduite, calc, baseCNPS } = props
+          salaireBase, primes, retenues, heuresSupplementaires, montantHS, avanceDeduite, calc, baseCNPS,
+          firstPaid, lastPaid, genereLe } = props
 
   const [platform, setPlatform] = useState<"android" | "ios" | "web">("web")
   const [sharing,  setSharing]  = useState(false)
@@ -239,6 +244,28 @@ export default function PrintClient(props: Props) {
       if (notes) {
         doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(...RGB.muted)
         doc.text(`Observations : ${notes}`, m, yPat + 14)
+      }
+
+      // Attestation de bonne réception
+      if (lastPaid) {
+        const yAtt = yPat + (notes ? 22 : 14)
+        doc.setDrawColor(...RGB.navy); doc.setLineWidth(0.5)
+        doc.line(m, yAtt, pageW - m, yAtt)
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...RGB.navy)
+        doc.text("ATTESTATION DE BONNE RECEPTION DE SALAIRE", m, yAtt + 5)
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...RGB.slate)
+        const periodeStr = (firstPaid && (firstPaid.mois !== lastPaid.mois || firstPaid.annee !== lastPaid.annee))
+          ? `de ${MOIS_FR[firstPaid.mois - 1]} ${firstPaid.annee} a ${MOIS_FR[lastPaid.mois - 1]} ${lastPaid.annee}`
+          : `au titre de ${MOIS_FR[lastPaid.mois - 1]} ${lastPaid.annee}`
+        doc.text(
+          `Nous, soussignes, ${entreprise.nom}, certifions que ${employe.prenom} ${employe.nom}, employe(e) en qualite de ${employe.poste} depuis le ${employe.dateEmbauche}, a percu l'integralite de ses remunerations enregistrees sur la plateforme, ${periodeStr}, sans aucun arriere a ce jour.`,
+          m, yAtt + 10, { maxWidth: pageW - m * 2 }
+        )
+        doc.setFont("helvetica", "italic"); doc.setFontSize(6.5); doc.setTextColor(...RGB.muted)
+        doc.text(
+          `Document autogenere le ${new Date().toLocaleDateString("fr-FR")} par la plateforme RH ${entreprise.nom}. Ce document est certifie conforme aux donnees enregistrees dans le systeme d'information RH. Toute modification manuelle annule sa valeur probante.`,
+          m, yAtt + 22, { maxWidth: pageW - m * 2 }
+        )
       }
 
       // Signatures
@@ -445,6 +472,24 @@ export default function PrintClient(props: Props) {
         .sig-label { font-size: 8.5px; font-weight: 600; color: #475569; margin-bottom: 12mm; }
         .sig-recu  { font-size: 8px; color: #64748b; margin-bottom: 8mm; font-style: italic; }
         .sig-line  { border-top: 1px solid #94a3b8; padding-top: 1.5mm; font-size: 8px; color: #94a3b8; }
+
+        /* ── Attestation de bonne réception ── */
+        .attestation-bloc {
+          margin-top: 3mm; padding: 2.5mm 4mm;
+          border: 1px solid ${C.navy}; border-left: 4px solid ${C.navy};
+          border-radius: 3px; background: #f8fafc;
+          font-size: 8px; color: #334155; line-height: 1.7;
+        }
+        .attestation-title {
+          font-size: 8.5px; font-weight: 700; color: ${C.navy};
+          text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1.5mm;
+        }
+
+        /* ── Mention autogénéré ── */
+        .autogen-mention {
+          margin-top: 2mm; text-align: center;
+          font-size: 7px; color: #94a3b8; font-style: italic;
+        }
 
         /* ── Pied de page SANOVIA ── */
         .footer-sanovia {
@@ -667,6 +712,31 @@ export default function PrintClient(props: Props) {
           {notes && (
             <div className="notes-bloc"><strong>Observations :</strong> {notes}</div>
           )}
+
+          {/* Attestation de bonne réception */}
+          {lastPaid && (
+            <div className="attestation-bloc">
+              <div className="attestation-title">Attestation de bonne réception de salaire</div>
+              <p>
+                Nous, soussignés, <strong>{entreprise.nom}</strong>, certifions que{" "}
+                <strong>{employe.prenom} {employe.nom}</strong>, employé(e) en qualité de{" "}
+                <strong>{employe.poste}</strong> depuis le <strong>{employe.dateEmbauche}</strong>,
+                a perçu l&rsquo;intégralité de ses rémunérations enregistrées sur la plateforme,
+                {firstPaid && (firstPaid.mois !== lastPaid.mois || firstPaid.annee !== lastPaid.annee) ? (
+                  <> depuis <strong>{MOIS_FR[firstPaid.mois - 1]} {firstPaid.annee}</strong> jusqu&rsquo;au <strong>{MOIS_FR[lastPaid.mois - 1]} {lastPaid.annee}</strong></>
+                ) : (
+                  <> au titre du mois de <strong>{MOIS_FR[lastPaid.mois - 1]} {lastPaid.annee}</strong></>
+                )}, sans aucun arriéré à ce jour.
+              </p>
+            </div>
+          )}
+
+          {/* Mention autogénéré */}
+          <div className="autogen-mention">
+            Document autogénéré le {genereLe} par la plateforme RH {entreprise.nom} —
+            Ce document est certifié conforme aux données enregistrées dans le système d&rsquo;information RH.
+            Toute modification manuelle annule sa valeur probante.
+          </div>
 
           {/* Signatures */}
           <div className="signatures">
