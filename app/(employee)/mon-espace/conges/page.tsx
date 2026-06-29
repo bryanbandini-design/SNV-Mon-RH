@@ -84,7 +84,7 @@ export default function MesCongesPage() {
   async function annulerDemande(id: string) {
     if (!confirm("Annuler cette demande de congé ?")) return
     setCancellingId(id)
-    const res = await fetch(`/api/conges/${id}`, { method: "DELETE" })
+    const res = await fetch(`/api/mon-espace/conges/${id}`, { method: "DELETE" })
     if (res.ok) {
       setConges(prev => prev.filter(c => c.id !== id))
       toast.success("Demande annulée")

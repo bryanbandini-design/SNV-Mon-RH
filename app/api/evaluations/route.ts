@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function GET(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const { searchParams } = new URL(req.url)
   const employeId = searchParams.get("employeId")
@@ -31,8 +31,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const data = await req.json()
   const notes: { critere: string; note: number; commentaire?: string; poids?: number }[] = data.notes ?? []

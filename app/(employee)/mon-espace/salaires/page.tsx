@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DollarSign, Printer, AlertCircle } from "lucide-react"
+import { DollarSign, Download, AlertCircle } from "lucide-react"
 import { formatCurrency, MOIS } from "@/lib/utils"
 
 type Employe = { prenom: string; nom: string; matricule: string; poste: string; salaireBase: number }
@@ -146,8 +146,8 @@ export default function MesSalairesPage() {
                     onClick={() => handleDownload(s)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-emerald-300 hover:text-emerald-700 transition-all flex-shrink-0"
                   >
-                    <Printer className="h-3.5 w-3.5" />
-                    Imprimer
+                    <Download className="h-3.5 w-3.5" />
+                    Télécharger
                   </button>
                 </div>
               )

@@ -239,6 +239,11 @@ model HistoriqueSalaire {
   // ── Heures supplémentaires (Code du Travail camerounais) ──
   heuresSupplementaires Float @default(0)   // nb heures sup travaillées
   montantHS             Float @default(0)   // montant brut calculé des HS
+  // ── Absences & retards ──
+  joursAbsence       Int   @default(0)   // nb jours d'absence déduits ce mois
+  retenueAbsence     Float @default(0)   // montant retenu pour absences (base/26 × jours)
+  minutesRetardTotal Int   @default(0)   // total minutes de retard cumulées
+  retenueRetard      Float @default(0)   // montant retenu pour retards
   // ── Charges patronales (informatif) ──
   cnpsPatronal Float     @default(0)   // 13.2% du brut plafonné (3.7+7+2.5)
   brutImposable Float    @default(0)   // Brut = base + primes + HS

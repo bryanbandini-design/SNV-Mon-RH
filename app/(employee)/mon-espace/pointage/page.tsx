@@ -8,7 +8,9 @@ type Presence = {
   date: string
   heureArrivee: string | null
   heureDepart:  string | null
+  heuresTravaillees: number | null
   statut: string
+  minutesRetard: number
   statutValidation: string
   notes: string | null
 }
@@ -247,10 +249,19 @@ export default function MonPointagePage() {
                     <p className="text-sm font-semibold text-slate-800 capitalize">{fmtDate(p.date)}</p>
                     <p className="text-xs text-slate-500 font-mono mt-0.5">
                       {p.heureArrivee ?? "--:--"} → {p.heureDepart ?? "--:--"}
+                      {p.heuresTravaillees != null && p.heuresTravaillees > 0 && (
+                        <span className="text-slate-400"> · {Math.floor(p.heuresTravaillees)}h{Math.round((p.heuresTravaillees % 1) * 60).toString().padStart(2,"0")}</span>
+                      )}
                     </p>
+                    {p.statut === "RETARD" && p.minutesRetard > 0 && (
+                      <p className="text-[10px] text-amber-600 font-medium mt-0.5">Retard : {p.minutesRetard} min</p>
+                    )}
                     {p.notes && <p className="text-xs text-slate-400 italic mt-0.5 truncate">{p.notes}</p>}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    {p.statut === "RETARD" && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Retard</span>
+                    )}
                     <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${cfg.cls}`}>
                       <Icon className="h-3 w-3" />
                       {cfg.label}

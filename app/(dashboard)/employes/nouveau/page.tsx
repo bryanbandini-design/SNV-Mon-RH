@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,10 +8,12 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Loader2, FlaskConical, Download } from "lucide-react"
+import { ArrowLeft, Loader2, FlaskConical, Download, GitBranch } from "lucide-react"
 import Link from "next/link"
 import { TYPES_CONTRAT } from "@/lib/utils"
 import { toast } from "sonner"
+
+type EmployeOption = { id: string; prenom: string; nom: string; poste: string }
 
 export default function NouvelEmployePage() {
   const router = useRouter()
@@ -20,6 +22,14 @@ export default function NouvelEmployePage() {
   const [periodeEssai, setPeriodeEssai] = useState(false)
   const [typeContrat, setTypeContrat] = useState("")
   const [dateEmbauche, setDateEmbauche] = useState("")
+  const [managerId, setManagerId] = useState("")
+  const [employes, setEmployes] = useState<EmployeOption[]>([])
+
+  useEffect(() => {
+    fetch("/api/employes").then(r => r.ok ? r.json() : []).then(d => {
+      if (Array.isArray(d)) setEmployes(d)
+    })
+  }, [])
 
   async function telechargerFormulaire() {
     setPdfLoading(true)
@@ -49,6 +59,7 @@ export default function NouvelEmployePage() {
     const form = new FormData(e.currentTarget)
     const data = Object.fromEntries(form.entries())
     data.periodeEssai = periodeEssai ? "true" : "false"
+    if (managerId) data.managerId = managerId
 
     const res = await fetch("/api/employes", {
       method: "POST",
@@ -119,6 +130,25 @@ export default function NouvelEmployePage() {
             </div>
             <div className="space-y-2"><Label>Fin de contrat</Label><Input name="dateFinContrat" type="date" /></div>
             <div className="space-y-2"><Label>Salaire de base *</Label><Input name="salaireBase" type="number" min="0" step="1000" required /></div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label className="flex items-center gap-1.5">
+                <GitBranch className="h-3.5 w-3.5 text-slate-400" />
+                Supérieur direct
+              </Label>
+              <select
+                value={managerId}
+                onChange={e => setManagerId(e.target.value)}
+                className="w-full h-9 text-sm border border-input rounded-md px-3 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">— Aucun (racine de l&apos;organigramme)</option>
+                {employes.map(e => (
+                  <option key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</option>
+                ))}
+              </select>
+              {employes.length === 0 && (
+                <p className="text-xs text-slate-400 mt-1">Aucun autre employé — ce sera le premier nœud de l&apos;organigramme.</p>
+              )}
+            </div>
             <div className="space-y-2 sm:col-span-2"><Label>Notes</Label><Textarea name="notes" rows={3} /></div>
           </CardContent>
         </Card>

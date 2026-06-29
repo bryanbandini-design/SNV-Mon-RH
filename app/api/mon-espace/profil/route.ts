@@ -15,8 +15,10 @@ export async function GET() {
     select: {
       id: true, prenom: true, nom: true, email: true, telephone: true,
       poste: true, departement: true, typeContrat: true, dateEmbauche: true,
+      dateFinContrat: true, periodeEssai: true, dateFinEssai: true, dateDebutEssai: true,
       salaireBase: true, statut: true, matricule: true, nationalite: true,
-      adresse: true, photoUrl: true,
+      adresse: true, photoUrl: true, dateNaissance: true, lieuNaissance: true,
+      numeroCni: true, notes: true, contactUrgenceNom: true, contactUrgenceTel: true,
     },
   })
 

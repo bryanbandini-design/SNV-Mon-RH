@@ -2,10 +2,11 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logActivity } from "@/lib/activity-log"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function GET() {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
 
   const avances = await prisma.avanceSalaire.findMany({
     include: { employe: { select: { id: true, prenom: true, nom: true, matricule: true, poste: true } } },
@@ -17,8 +18,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error, session } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
 
   const { employeId, montant, motif, date } = await req.json()
   if (!employeId || !montant) {

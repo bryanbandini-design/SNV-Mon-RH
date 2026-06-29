@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { heureEnMinutes } from "@/lib/utils"
 import { creerRetenueProvisoire, calculerRetenueRetard } from "@/lib/retenues"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error, session } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const { id } = await params
   const data = await req.json()
@@ -14,7 +14,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Validation admin d'une saisie manuelle
   if (data.action === "VALIDER" || data.action === "REJETER") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const role = (session.user as any)?.role
+    const role = (session!.user as any)?.role
     if (!["ADMIN", "RH", "RESPONSABLE"].includes(role)) {
       return NextResponse.json({ message: "Réservé au responsable ou à l'administrateur" }, { status: 403 })
     }
@@ -104,9 +104,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json(presence)
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const { id } = await params
   await prisma.presence.delete({ where: { id } })

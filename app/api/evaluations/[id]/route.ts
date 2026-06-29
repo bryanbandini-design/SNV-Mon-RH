@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const { id } = await params
   const evaluation = await prisma.evaluation.findUnique({
@@ -21,8 +21,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const { id } = await params
   const body = await req.json()
@@ -130,8 +130,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
 
   const { id } = await params
   await prisma.evaluation.delete({ where: { id } })

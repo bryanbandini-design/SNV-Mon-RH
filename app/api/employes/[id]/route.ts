@@ -2,10 +2,11 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logActivity } from "@/lib/activity-log"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
   const { id } = await params
   const employe = await prisma.employe.findUnique({ where: { id } })
   if (!employe) return NextResponse.json({ message: "Introuvable" }, { status: 404 })
@@ -13,8 +14,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error, session } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
   const { id } = await params
   const data = await req.json()
 
@@ -61,8 +62,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error, session } = await requireRole(["ADMIN"])
+  if (error) return error
   const { id } = await params
 
   const employe = await prisma.employe.findUnique({ where: { id }, select: { prenom: true, nom: true, matricule: true } })

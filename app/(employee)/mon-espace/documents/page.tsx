@@ -84,7 +84,7 @@ export default function MesDocumentsPage() {
               <a
                 href={`/api/files/${doc.url}`}
                 download={doc.nom}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all opacity-0 group-hover:opacity-100"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all flex-shrink-0"
               >
                 <Download className="h-3.5 w-3.5" />
                 Télécharger

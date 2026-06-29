@@ -4,18 +4,19 @@ import { prisma } from "@/lib/prisma"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
+import { requireRole } from "@/lib/auth-guards"
 
 async function auditLog(dossierId: string, auteurId: string, auteurNom: string, type: string, description: string) {
   await prisma.auditLog.create({ data: { dossierId, auteurId, auteurNom, type, description } })
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error, session } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userId    = (session.user as any)?.id as string
-  const auteurNom = session.user?.name ?? "Inconnu"
+  const userId    = (session!.user as any)?.id as string
+  const auteurNom = session!.user?.name ?? "Inconnu"
 
   let formData: FormData
   try { formData = await req.formData() }

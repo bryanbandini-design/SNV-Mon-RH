@@ -1,13 +1,18 @@
 import { prisma } from "@/lib/prisma"
 
-const RETENUE_ABSENCE_FCFA = 5_000
-// Nb d'heures mensuelles de référence (Code Travail Cameroun : 26j × 8h)
+// Code du Travail Cameroun : 26 jours ouvrables × 8h = 208h mensuelles
+const JOURS_OUVRES_MOIS = 26
 const HEURES_MOIS = 208
 
-/** Calcule le montant de retenue pour un retard donné */
+/** Calcule la retenue pour jours d'absence (salaireBase ÷ 26 × jours) */
+export function calculerRetenueAbsence(joursAbsence: number, salaireBase: number): number {
+  return Math.round((salaireBase / JOURS_OUVRES_MOIS) * joursAbsence)
+}
+
+/** Calcule le montant de retenue pour un retard (taux horaire × 2 × heures) */
 export function calculerRetenueRetard(minutesRetard: number, salaireBase: number): number {
-  const heuresRetard   = minutesRetard / 60
-  const tauxHoraire    = salaireBase / HEURES_MOIS
+  const heuresRetard = minutesRetard / 60
+  const tauxHoraire  = salaireBase / HEURES_MOIS
   return Math.round(heuresRetard * tauxHoraire * 2)
 }
 

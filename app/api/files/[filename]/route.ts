@@ -3,10 +3,11 @@ import { auth } from "@/auth"
 import { readFile } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ filename: string }> }) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH", "RESPONSABLE"])
+  if (error) return error
 
   const { filename } = await params
 

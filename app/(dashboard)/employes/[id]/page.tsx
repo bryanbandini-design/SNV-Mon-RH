@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   ArrowLeft, Calendar, AlertTriangle, DollarSign, Edit,
   Phone, Mail, MapPin, FlaskConical, Briefcase, Clock, Star,
-  GitCommitHorizontal, TrendingUp, ShieldAlert, FileText, Download,
+  GitCommitHorizontal, TrendingUp, ShieldAlert, FileText, Download, GitBranch,
 } from "lucide-react"
 import { AttestationButtons } from "@/components/employes/attestation-buttons"
 import { formatDate, formatCurrency, MOIS } from "@/lib/utils"
@@ -27,6 +27,13 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
   })
 
   if (!employe) notFound()
+
+  const manager = employe.managerId
+    ? await prisma.employe.findUnique({
+        where: { id: employe.managerId },
+        select: { id: true, prenom: true, nom: true, poste: true },
+      })
+    : null
 
   const now = new Date()
   const embauche = new Date(employe.dateEmbauche)
@@ -210,6 +217,28 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
                   <p className="text-sm font-medium text-slate-800">{f.value}</p>
                 </div>
               ))}
+
+              {/* Supérieur direct */}
+              <div className="sm:col-span-2">
+                <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                  <GitBranch className="h-3 w-3" /> Supérieur direct
+                </p>
+                {manager ? (
+                  <Link href={`/employes/${manager.id}`}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 flex-shrink-0">
+                      {manager.prenom[0]}{manager.nom[0]}
+                    </div>
+                    <div>
+                      <span className="text-sm font-semibold text-slate-800">{manager.prenom} {manager.nom}</span>
+                      <span className="text-xs text-slate-500 ml-1.5">— {manager.poste}</span>
+                    </div>
+                  </Link>
+                ) : (
+                  <p className="text-sm text-slate-400 italic">Aucun — racine de l&apos;organigramme</p>
+                )}
+              </div>
+
               {employe.notes && (
                 <div className="col-span-2">
                   <p className="text-xs text-slate-400 mb-0.5">Notes</p>

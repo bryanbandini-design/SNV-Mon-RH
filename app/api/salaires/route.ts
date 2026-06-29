@@ -4,10 +4,12 @@ import { prisma } from "@/lib/prisma"
 import { logActivity } from "@/lib/activity-log"
 import { MOIS } from "@/lib/utils"
 import { calculerSalaire, calculerHS } from "@/lib/cameroun-salaire"
+import { calculerRetenueAbsence, calculerRetenueRetard } from "@/lib/retenues"
+import { requireRole } from "@/lib/auth-guards"
 
 export async function GET() {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
 
   const salaires = await prisma.historiqueSalaire.findMany({
     include: { employe: { select: { id: true, prenom: true, nom: true, matricule: true, poste: true } } },
@@ -19,8 +21,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ message: "Non autorisé" }, { status: 401 })
+  const { error, session } = await requireRole(["ADMIN", "RH"])
+  if (error) return error
 
   const data        = await req.json()
   const salaireBase = parseFloat(data.salaireBase) || 0
@@ -30,13 +32,18 @@ export async function POST(req: Request) {
   const tauxHS      = (data.tauxHS as string) || "NORMAL"
   const montantHS   = nbHS > 0 ? calculerHS(salaireBase, nbHS, tauxHS as "NORMAL" | "ELEVE" | "DIMANCHE") : 0
 
+  const joursAbsence       = parseInt(data.joursAbsence ?? 0) || 0
+  const minutesRetardTotal  = parseInt(data.minutesRetardTotal ?? 0) || 0
+  const retenueAbsence      = joursAbsence > 0 ? calculerRetenueAbsence(joursAbsence, salaireBase) : 0
+  const retenueRetard       = minutesRetardTotal > 0 ? calculerRetenueRetard(minutesRetardTotal, salaireBase) : 0
+
   // Avances validées non encore déduites pour cet employé
   const avancesValides = await prisma.avanceSalaire.findMany({
     where: { employeId: data.employeId, statut: "VALIDEE" },
   })
   const avanceDeduite = avancesValides.reduce((s, a) => s + a.montant, 0)
 
-  const calcul = calculerSalaire(salaireBase, primes, retenues + avanceDeduite, montantHS)
+  const calcul = calculerSalaire(salaireBase, primes, retenues + retenueAbsence + retenueRetard + avanceDeduite, montantHS)
 
   const salaire = await prisma.historiqueSalaire.create({
     data: {
@@ -48,6 +55,10 @@ export async function POST(req: Request) {
       retenues,
       heuresSupplementaires: nbHS,
       montantHS,
+      joursAbsence,
+      retenueAbsence,
+      minutesRetardTotal,
+      retenueRetard,
       avanceDeduite,
       brutImposable:        calcul.brutImposable,
       cnpsSalarie:          calcul.cnpsSalarie,

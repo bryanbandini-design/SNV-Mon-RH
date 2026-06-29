@@ -12,7 +12,7 @@ import {
 import { formatCurrency, MOIS } from "@/lib/utils"
 import { toast } from "sonner"
 import { calculerSalaire, calculerHS, CAMEROUN, formatFCFA, type DetailsSalaire, type TauxHS } from "@/lib/cameroun-salaire"
-// Déclaration CNPS mensuelle retirée — à retravailler avec le fiscaliste
+import { calculerRetenueAbsence, calculerRetenueRetard } from "@/lib/retenues"
 
 function downloadCSV(rows: (string | number)[][], filename: string) {
   const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
@@ -29,6 +29,8 @@ type Salaire = {
   primes: number; retenues: number; netAPayer: number
   brutImposable: number; cnpsSalarie: number; irpp: number; cac: number; rav: number; cnpsPatronal: number
   heuresSupplementaires: number; montantHS: number; avanceDeduite: number
+  joursAbsence: number; retenueAbsence: number
+  minutesRetardTotal: number; retenueRetard: number
   statut: string; datePaiement: string | null; notes: string | null
   employe: { id: string; prenom: string; nom: string; matricule: string; poste: string }
 }
@@ -50,6 +52,7 @@ const emptyForm = (currentMonth: number, currentYear: number) => ({
   employeId: "", mois: String(currentMonth), annee: String(currentYear),
   salaireBase: "", primes: "0", retenues: "0", notes: "",
   heuresSupplementaires: "0", tauxHS: "NORMAL" as TauxHS,
+  joursAbsence: "0", minutesRetardTotal: "0",
 })
 const emptyAvanceForm = () => ({ employeId: "", montant: "", motif: "", date: new Date().toISOString().split("T")[0] })
 
@@ -150,6 +153,8 @@ export default function SalairesPage() {
       notes:                 s.notes ?? "",
       heuresSupplementaires: String(s.heuresSupplementaires || 0),
       tauxHS:                "NORMAL",
+      joursAbsence:          String(s.joursAbsence || 0),
+      minutesRetardTotal:    String(s.minutesRetardTotal || 0),
     })
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -276,8 +281,16 @@ export default function SalairesPage() {
   const previewHS = form.salaireBase && parseFloat(form.heuresSupplementaires || "0") > 0
     ? calculerHS(parseFloat(form.salaireBase) || 0, parseFloat(form.heuresSupplementaires || "0"), form.tauxHS)
     : 0
-  const previewCalc: DetailsSalaire | null = form.salaireBase
-    ? calculerSalaire(parseFloat(form.salaireBase) || 0, parseFloat(form.primes || "0") || 0, parseFloat(form.retenues || "0") || 0, previewHS)
+  const previewBase = parseFloat(form.salaireBase) || 0
+  const previewRetenueAbsence = previewBase > 0 && parseInt(form.joursAbsence || "0") > 0
+    ? calculerRetenueAbsence(parseInt(form.joursAbsence || "0"), previewBase)
+    : 0
+  const previewRetenueRetard = previewBase > 0 && parseInt(form.minutesRetardTotal || "0") > 0
+    ? calculerRetenueRetard(parseInt(form.minutesRetardTotal || "0"), previewBase)
+    : 0
+  const previewTotalAutresRetenues = (parseFloat(form.retenues || "0") || 0) + previewRetenueAbsence + previewRetenueRetard
+  const previewCalc: DetailsSalaire | null = previewBase > 0
+    ? calculerSalaire(previewBase, parseFloat(form.primes || "0") || 0, previewTotalAutresRetenues, previewHS)
     : null
 
   // Avances validées non déduites pour l'employé sélectionné
@@ -397,7 +410,7 @@ export default function SalairesPage() {
                 <button key={e.id}
                   onClick={() => {
                     setEditId(null)
-                    setForm({ employeId: e.id, mois: rattrapageMois, annee: rattrapageAnnee, salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "", heuresSupplementaires: "0", tauxHS: "NORMAL" })
+                    setForm({ employeId: e.id, mois: rattrapageMois, annee: rattrapageAnnee, salaireBase: String(e.salaireBase), primes: "0", retenues: "0", notes: "", heuresSupplementaires: "0", tauxHS: "NORMAL", joursAbsence: "0", minutesRetardTotal: "0" })
                     setShowForm(true)
                     setActiveTab("fiches")
                     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -498,6 +511,47 @@ export default function SalairesPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* ── Absences & retards ── */}
+            <div className="col-span-full">
+              <div className="rounded-lg border border-red-100 bg-red-50/40 p-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <p className="col-span-full text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Déductions — absences & retards</p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600">Jours d'absence</Label>
+                  <Input
+                    type="number"
+                    value={form.joursAbsence}
+                    onChange={e => setForm(p => ({ ...p, joursAbsence: e.target.value }))}
+                    min="0" max="26" step="1" placeholder="0"
+                  />
+                  {previewRetenueAbsence > 0 && (
+                    <p className="text-xs text-red-600 font-medium">
+                      Retenue : – {previewRetenueAbsence.toLocaleString("fr-FR")} FCFA
+                      <span className="text-slate-400 font-normal ml-1">
+                        ({parseInt(form.joursAbsence || "0")}j × {Math.round(previewBase / 26).toLocaleString("fr-FR")} FCFA/jour)
+                      </span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600">Retard cumulé (minutes)</Label>
+                  <Input
+                    type="number"
+                    value={form.minutesRetardTotal}
+                    onChange={e => setForm(p => ({ ...p, minutesRetardTotal: e.target.value }))}
+                    min="0" step="1" placeholder="0"
+                  />
+                  {previewRetenueRetard > 0 && (
+                    <p className="text-xs text-red-600 font-medium">
+                      Retenue : – {previewRetenueRetard.toLocaleString("fr-FR")} FCFA
+                      <span className="text-slate-400 font-normal ml-1">
+                        ({parseInt(form.minutesRetardTotal || "0")} min)
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
             {avancesEnAttentePourEmploye.length > 0 && (
               <div className="col-span-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
                 <p className="font-semibold text-amber-800 mb-1">Avances à déduire automatiquement</p>
@@ -523,7 +577,9 @@ export default function SalairesPage() {
                   { label: "IRPP (progressif)", val: -previewCalc.irpp, cls: "text-red-700" },
                   { label: "CAC (10% de l'IRPP)", val: -previewCalc.cac, cls: "text-red-700" },
                   { label: "RAV (forfait mensuel)", val: -previewCalc.rav, cls: "text-red-700" },
-                  ...(previewCalc.autresRetenues > 0 ? [{ label: "Autres retenues", val: -previewCalc.autresRetenues, cls: "text-red-700" }] : []),
+                  ...(previewRetenueAbsence > 0 ? [{ label: `Absences (${form.joursAbsence}j × base/26)`, val: -previewRetenueAbsence, cls: "text-red-700" }] : []),
+                  ...(previewRetenueRetard > 0 ? [{ label: `Retards (${form.minutesRetardTotal} min)`, val: -previewRetenueRetard, cls: "text-red-700" }] : []),
+                  ...((parseFloat(form.retenues || "0") || 0) > 0 ? [{ label: "Autres retenues", val: -(parseFloat(form.retenues || "0") || 0), cls: "text-red-700" }] : []),
                 ] as { label: string; val: number; cls: string }[]).map(r => (
                   <div key={r.label} className={`flex justify-between ${r.cls}`}>
                     <span>{r.label}</span>
