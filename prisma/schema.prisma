@@ -542,6 +542,41 @@ model Entretien {
   candidat Candidat @relation(fields: [candidatId], references: [id], onDelete: Cascade)
 }
 
+// ─── DÉCLARATIONS SOCIALES & FISCALES ─────────────────────────────────────
+
+model DeclarationPeriode {
+  id                  String    @id @default(cuid())
+  mois                Int
+  annee               Int
+  statut              String    @default("BROUILLON") // BROUILLON | TRANSMISE | SOLDEE | EN_ARRIERS
+
+  // Totaux CNPS
+  totalBrutCNPS       Float     @default(0)
+  totalCNPSSalarie    Float     @default(0)
+  totalCNPSPatronal   Float     @default(0)
+  totalCNPS           Float     @default(0)
+
+  // Totaux Impôts
+  totalIRPP           Float     @default(0)
+  totalCAC            Float     @default(0)
+  totalRAV            Float     @default(0)
+  totalImpots         Float     @default(0)
+
+  totalAVerser        Float     @default(0)
+  nbSalaries          Int       @default(0)
+
+  // Suivi
+  dateTransmission    DateTime?
+  datePaiementCNPS    DateTime?
+  datePaiementImpots  DateTime?
+
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([mois, annee])
+}
+
 // ─── MODULE FORMATION ─────────────────────────────────────────────────────
 
 model Formation {

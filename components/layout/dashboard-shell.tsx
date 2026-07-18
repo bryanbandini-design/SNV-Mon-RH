@@ -23,6 +23,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/disciplinaire/demandes":      "Demandes d'explication",
   "/disciplinaire/dossiers":      "Dossiers employés",
   "/salaires":                    "Salaires",
+  "/declarations":                "Déclarations sociales & fiscales",
   "/evaluations":                 "Évaluations",
   "/horaires":                    "Horaires",
   "/pointage":                    "Pointage QR",

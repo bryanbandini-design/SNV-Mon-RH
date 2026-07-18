@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { calculerSalaire, calculerHS } from "@/lib/cameroun-salaire"
 import { calculerRetenueAbsence, calculerRetenueRetard } from "@/lib/retenues"
 import { requireRole } from "@/lib/auth-guards"
+import { syncDeclarationPeriode } from "@/lib/sync-declaration"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireRole(["ADMIN", "RH"])
@@ -34,6 +35,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         datePaiement: body.statut === "PAYE" ? new Date() : null,
       },
     })
+    // Créer ou mettre à jour la déclaration de la période
+    if (body.statut === "PAYE") {
+      await syncDeclarationPeriode(salaire.mois, salaire.annee)
+    }
     return NextResponse.json(salaire)
   }
 

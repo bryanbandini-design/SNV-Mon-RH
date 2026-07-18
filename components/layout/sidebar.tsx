@@ -10,6 +10,7 @@ import {
   Bell, X, Check, ShieldOff, ChevronDown,
   FileText, FolderOpen, MessageSquareWarning, ScanLine, History,
   UserSearch, GraduationCap, GitBranch, Settings, UserCog, Megaphone,
+  Scale,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
 import { cn } from "@/lib/utils"
@@ -50,6 +51,8 @@ const NAV_SECTIONS = [
       },
       { name: "Salaires", href: "/salaires", icon: DollarSign,
         color: "text-emerald-400", bg: "bg-emerald-400/12", glow: "#34d399", perm: "SALAIRES" as PermKey },
+      { name: "Déclarations", href: "/declarations", icon: Scale,
+        color: "text-violet-400", bg: "bg-violet-400/12", glow: "#a78bfa", perm: "DECLARATIONS" as PermKey },
     ],
   },
   {

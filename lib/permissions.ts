@@ -4,12 +4,14 @@ export type PermKey =
   | "DASHBOARD" | "EMPLOYES" | "CONGES" | "DISCIPLINAIRE" | "SALAIRES"
   | "EVALUATIONS" | "HORAIRES" | "POINTAGE" | "HISTORIQUE"
   | "RECRUTEMENT" | "FORMATIONS" | "ORGANIGRAMME"
+  | "DECLARATIONS"
   | "PARAMETRES" | "ADMIN_USERS"
 
 export const ALL_PERMISSIONS: PermKey[] = [
   "DASHBOARD", "EMPLOYES", "CONGES", "DISCIPLINAIRE", "SALAIRES",
   "EVALUATIONS", "HORAIRES", "POINTAGE", "HISTORIQUE",
   "RECRUTEMENT", "FORMATIONS", "ORGANIGRAMME",
+  "DECLARATIONS",
   "PARAMETRES", "ADMIN_USERS",
 ]
 
@@ -26,6 +28,7 @@ export const PERM_LABELS: Record<PermKey, string> = {
   RECRUTEMENT:  "Recrutement",
   FORMATIONS:   "Formations",
   ORGANIGRAMME: "Organigramme",
+  DECLARATIONS: "Déclarations sociales & fiscales",
   PARAMETRES:   "Paramètres",
   ADMIN_USERS:  "Gestion utilisateurs",
 }
@@ -48,6 +51,10 @@ export const PERM_GROUPS = [
     keys: ["RECRUTEMENT", "FORMATIONS", "ORGANIGRAMME"] as PermKey[],
   },
   {
+    label: "Fiscal",
+    keys: ["DECLARATIONS"] as PermKey[],
+  },
+  {
     label: "Administration",
     keys: ["PARAMETRES", "ADMIN_USERS"] as PermKey[],
   },
@@ -59,7 +66,8 @@ export const DEFAULT_PERMISSIONS: Record<string, PermKey[]> = {
   RH: [
     "DASHBOARD", "EMPLOYES", "CONGES", "DISCIPLINAIRE", "SALAIRES",
     "EVALUATIONS", "HORAIRES", "POINTAGE", "HISTORIQUE",
-    "RECRUTEMENT", "FORMATIONS", "ORGANIGRAMME", "PARAMETRES",
+    "RECRUTEMENT", "FORMATIONS", "ORGANIGRAMME",
+    "DECLARATIONS", "PARAMETRES",
   ],
   RESPONSABLE: [
     "DASHBOARD", "EMPLOYES", "CONGES", "DISCIPLINAIRE", "HORAIRES", "POINTAGE",
