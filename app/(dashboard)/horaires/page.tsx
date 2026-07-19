@@ -24,6 +24,7 @@ type Presence    = {
   heuresTravaillees: number | null; minutesRetard: number; statut: string; notes: string | null
   saisieManuelle: boolean; statutValidation: string; saisieParNom: string | null; motifManuel: string | null
   heuresSupBrutes: number; statutHeuresSup: string; heureFinShiftRef: string | null
+  employeId: string
   employe: { prenom: string; nom: string; matricule: string; poste: string }
 }
 
@@ -186,6 +187,7 @@ export default function HorairesPage() {
     motifManuel: "Rattrapage de données", notes: "",
   })
   const [savingManuel, setSavingManuel] = useState(false)
+  const [editingManuelId, setEditingManuelId] = useState<string | null>(null)
 
   // ── Composition équipes ──────────────────────────────────────────────────────
   const [equipesPeriode, setEquipesPeriode] = useState(() => {
@@ -293,6 +295,32 @@ export default function HorairesPage() {
       return
     }
     setSavingManuel(true)
+
+    // Mode édition : PATCH sur la présence existante
+    if (editingManuelId) {
+      const res = await fetch(`/api/presences/${editingManuelId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          heureArrivee:     formManuel.heureArrivee,
+          heureDepart:      formManuel.heureDepart,
+          heureFinShiftRef: formManuel.heureFinShiftRef || null,
+          notes:            formManuel.notes,
+        }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        const emp = employes.find(x => x.id === formManuel.employeId)
+        setSaisiesManuelle(prev => prev.map(s => s.id === editingManuelId ? { ...s, ...updated, employe: emp ?? s.employe } : s))
+        setEditingManuelId(null)
+        setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
+        toast.success("Saisie mise à jour")
+      } else { toast.error("Erreur lors de la mise à jour") }
+      setSavingManuel(false)
+      return
+    }
+
+    // Mode création : POST
     const res = await fetch("/api/presences", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1078,28 +1106,44 @@ export default function HorairesPage() {
             )}
           </div>
 
-          {/* Formulaire de saisie */}
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-              <PenLine className="h-4 w-4 text-indigo-500" />
-              <p className="font-semibold text-slate-900 text-sm">Nouvelle saisie manuelle</p>
+          {/* Formulaire de saisie / modification */}
+          <div className={`rounded-xl border bg-white overflow-hidden ${editingManuelId ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"}`}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {editingManuelId ? <Pencil className="h-4 w-4 text-indigo-500" /> : <PenLine className="h-4 w-4 text-indigo-500" />}
+                <p className="font-semibold text-slate-900 text-sm">
+                  {editingManuelId ? "Modifier la saisie" : "Nouvelle saisie manuelle"}
+                </p>
+              </div>
+              {editingManuelId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingManuelId(null)
+                    setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
+                  }}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-slate-100"
+                >
+                  <X className="h-3.5 w-3.5" /> Annuler
+                </button>
+              )}
             </div>
             <form onSubmit={soumettreManuel} className="p-5">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
                   <Label className="text-xs font-medium text-slate-600">Employé *</Label>
-                  <Select value={formManuel.employeId} onValueChange={v => setFormManuel(p => ({ ...p, employeId: v }))}>
+                  <Select value={formManuel.employeId} onValueChange={v => setFormManuel(p => ({ ...p, employeId: v }))} disabled={!!editingManuelId}>
                     <SelectTrigger className="h-9"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
                     <SelectContent>{employes.map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-slate-600">Date *</Label>
-                  <Input type="date" value={formManuel.date} onChange={e => setFormManuel(p => ({ ...p, date: e.target.value }))} className="h-9" required />
+                  <Input type="date" value={formManuel.date} onChange={e => setFormManuel(p => ({ ...p, date: e.target.value }))} className="h-9" required disabled={!!editingManuelId} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-slate-600">Motif *</Label>
-                  <Select value={formManuel.motifManuel} onValueChange={v => setFormManuel(p => ({ ...p, motifManuel: v }))}>
+                  <Select value={formManuel.motifManuel} onValueChange={v => setFormManuel(p => ({ ...p, motifManuel: v }))} disabled={!!editingManuelId}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>{MOTIFS_MANUEL.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                   </Select>
@@ -1150,9 +1194,9 @@ export default function HorairesPage() {
                 <p className="text-xs text-slate-400">Saisi par : <span className="font-medium text-slate-600">{userName}</span></p>
                 <button type="submit" disabled={savingManuel}
                   className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
-                  {savingManuel ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenLine className="h-4 w-4" />}
-                  Enregistrer la présence
+                  style={{ background: editingManuelId ? "linear-gradient(135deg, #0ea5e9, #0284c7)" : "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
+                  {savingManuel ? <Loader2 className="h-4 w-4 animate-spin" /> : editingManuelId ? <Pencil className="h-4 w-4" /> : <PenLine className="h-4 w-4" />}
+                  {editingManuelId ? "Mettre à jour" : "Enregistrer la présence"}
                 </button>
               </div>
             </form>
@@ -1236,8 +1280,28 @@ export default function HorairesPage() {
                           </div>
                         </div>
 
-                        {/* Boutons validation saisie + HS */}
+                        {/* Boutons modification + validation saisie + HS */}
                         <div className="flex flex-col gap-2 flex-shrink-0">
+                          {isAdmin && (
+                            <button
+                              onClick={() => {
+                                setEditingManuelId(s.id)
+                                setFormManuel({
+                                  employeId:        s.employeId ?? "",
+                                  date:             new Date(s.date).toISOString().split("T")[0],
+                                  heureArrivee:     s.heureArrivee ?? "",
+                                  heureDepart:      s.heureDepart  ?? "",
+                                  heureFinShiftRef: s.heureFinShiftRef ?? "",
+                                  motifManuel:      s.motifManuel ?? "Rattrapage de données",
+                                  notes:            s.notes ?? "",
+                                })
+                                window.scrollTo({ top: 0, behavior: "smooth" })
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Modifier
+                            </button>
+                          )}
                           {isAdmin && isPending && (
                             <div className="flex items-center gap-2">
                               <button onClick={() => validerSaisie(s.id, "VALIDER")}
