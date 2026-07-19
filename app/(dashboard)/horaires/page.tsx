@@ -179,6 +179,7 @@ export default function HorairesPage() {
   const [saisiesMLoading, setSaisiesMLoading] = useState(false)
   const [validating,   setValidating]   = useState<string | null>(null)
   const [validatingHS, setValidatingHS] = useState<string | null>(null)
+  const [resyncingHS,  setResyncingHS]  = useState(false)
   const [formManuel, setFormManuel] = useState({
     employeId: "", date: new Date().toISOString().split("T")[0],
     heureArrivee: "", heureDepart: "", heureFinShiftRef: "",
@@ -330,6 +331,26 @@ export default function HorairesPage() {
       )
     } else { toast.error("Erreur lors de la validation des HS") }
     setValidatingHS(null)
+  }
+
+  // ── Resync rétroactif HS sur saisies manuelles existantes ────────────────────
+  async function resyncHS() {
+    if (!confirm("Recalibrer toutes les saisies manuelles existantes avec plus de 8h ?\n\nLes heures au-delà de 8h seront placées en attente de validation (HS). Cette action est irréversible.")) return
+    setResyncingHS(true)
+    const res = await fetch("/api/presences/resync-hs", { method: "POST" })
+    if (res.ok) {
+      const json = await res.json()
+      toast.success(json.message)
+      // Recharger les saisies manuelles pour afficher les nouveaux badges EN_ATTENTE
+      setSaisiesMLoading(true)
+      fetch("/api/presences?manuel=all")
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d)) setSaisiesManuelle(d) })
+        .finally(() => setSaisiesMLoading(false))
+    } else {
+      toast.error("Erreur lors de la recalibration")
+    }
+    setResyncingHS(false)
   }
 
   // ── Saisie manuelle — valider/rejeter ────────────────────────────────────────
@@ -1037,13 +1058,24 @@ export default function HorairesPage() {
           {/* Bandeau info */}
           <div className="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
             <Zap className="h-4 w-4 text-indigo-600 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-indigo-800">
+            <div className="flex-1 text-sm text-indigo-800">
               <p className="font-semibold">Saisie administrative — rattrapage & corrections</p>
               <p className="text-xs mt-0.5 text-indigo-700">
                 Vous pouvez saisir des présences pour <strong>n&apos;importe quelle date passée</strong> (rattrapage de données, panne système, correction).
                 En tant qu&apos;administrateur, les saisies sont <strong>validées automatiquement</strong> et immédiatement comptabilisées dans les heures de travail.
               </p>
             </div>
+            {isAdmin && (
+              <button
+                onClick={resyncHS}
+                disabled={resyncingHS}
+                title="Recalibrer les saisies existantes avec plus de 8h — place les heures supplémentaires en attente de validation"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                {resyncingHS ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Timer className="h-3.5 w-3.5" />}
+                Audit HS existantes
+              </button>
+            )}
           </div>
 
           {/* Formulaire de saisie */}
