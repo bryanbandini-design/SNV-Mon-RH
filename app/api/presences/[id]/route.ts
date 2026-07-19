@@ -11,7 +11,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const data = await req.json()
 
-  // Validation admin d'une saisie manuelle
+  // ── Validation admin d'une saisie manuelle ────────────────────────────────
   if (data.action === "VALIDER" || data.action === "REJETER") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const role = (session!.user as any)?.role
@@ -22,7 +22,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const existing = await prisma.presence.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ message: "Non trouvé" }, { status: 404 })
 
-    // À la validation, recalculer heuresTravaillees si pas encore calculé
     const updateData: Record<string, unknown> = {
       statutValidation: data.action === "VALIDER" ? "VALIDEE" : "REJETEE",
     }
@@ -42,7 +41,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       },
     })
 
-    // Créer retenue provisoire à la validation si pas déjà existante
     if (data.action === "VALIDER" && !presence.retenueAbsence) {
       if (existing.statut === "ABSENT") {
         await creerRetenueProvisoire({
@@ -54,10 +52,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           description: "Absence non justifiée",
         })
       } else if (existing.minutesRetard > 0) {
-        const montant = calculerRetenueRetard(
-          existing.minutesRetard,
-          presence.employe.salaireBase
-        )
+        const montant = calculerRetenueRetard(existing.minutesRetard, presence.employe.salaireBase)
         if (montant > 0) {
           await creerRetenueProvisoire({
             employeId: existing.employeId,
@@ -74,17 +69,64 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(presence)
   }
 
+  // ── Validation des heures supplémentaires (ADMIN uniquement) ──────────────
+  if (data.action === "VALIDER_HS" || data.action === "REJETER_HS") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const role = (session!.user as any)?.role
+    if (role !== "ADMIN") {
+      return NextResponse.json({ message: "Réservé à l'administrateur" }, { status: 403 })
+    }
+
+    const existing = await prisma.presence.findUnique({ where: { id } })
+    if (!existing) return NextResponse.json({ message: "Non trouvé" }, { status: 404 })
+
+    if (data.action === "VALIDER_HS") {
+      // Ajouter les HS brutes aux heures comptabilisées
+      const presence = await prisma.presence.update({
+        where: { id },
+        data: {
+          heuresTravaillees: (existing.heuresTravaillees ?? 0) + existing.heuresSupBrutes,
+          statutHeuresSup: "VALIDEE",
+        },
+      })
+      return NextResponse.json(presence)
+    }
+
+    // REJETER_HS : heuresTravaillees reste capé — juste mise à jour du statut
+    const presence = await prisma.presence.update({
+      where: { id },
+      data: { statutHeuresSup: "REJETEE" },
+    })
+    return NextResponse.json(presence)
+  }
+
+  // ── Mise à jour libre (correction d'une présence) ─────────────────────────
   let heuresTravaillees: number | null = null
   let minutesRetard = 0
+  let heuresSupBrutes = 0
+  let statutHeuresSup = "N/A"
 
   if (data.heureArrivee && data.heureDepart) {
-    const debut = heureEnMinutes(data.heureArrivee)
-    const fin = heureEnMinutes(data.heureDepart)
-    heuresTravaillees = Math.max(0, (fin - debut)) / 60
+    const debut  = heureEnMinutes(data.heureArrivee)
+    const fin    = heureEnMinutes(data.heureDepart)
+    const rawMin = Math.max(0, fin - debut)
+
+    if (data.heureFinShiftRef) {
+      const finShift = heureEnMinutes(data.heureFinShiftRef)
+      if (fin > finShift) {
+        heuresTravaillees = Math.max(0, finShift - debut) / 60
+        heuresSupBrutes   = (fin - finShift) / 60
+        statutHeuresSup   = "EN_ATTENTE"
+      } else {
+        heuresTravaillees = rawMin / 60
+      }
+    } else {
+      heuresTravaillees = rawMin / 60
+    }
   }
 
   if (data.heureArrivee && data.heureReferenceDebut) {
-    const arrivee = heureEnMinutes(data.heureArrivee)
+    const arrivee   = heureEnMinutes(data.heureArrivee)
     const reference = heureEnMinutes(data.heureReferenceDebut)
     minutesRetard = Math.max(0, arrivee - reference)
   }
@@ -98,6 +140,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       minutesRetard,
       statut: data.statut ?? (minutesRetard > 0 ? "RETARD" : "PRESENT"),
       notes: data.notes || null,
+      heuresSupBrutes,
+      statutHeuresSup,
+      heureFinShiftRef: data.heureFinShiftRef || null,
     },
   })
 

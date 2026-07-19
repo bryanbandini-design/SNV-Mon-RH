@@ -9,12 +9,12 @@ import {
   Clock, Plus, Shuffle, Settings, ClipboardList, Loader2,
   AlertCircle, Trash2, CalendarDays, ChevronLeft, ChevronRight, Download,
   Pencil, Check, X, Users, UserCheck, Crown, Info, PenLine, ShieldCheck,
-  ShieldX, Zap,
+  ShieldX, Zap, Timer,
 } from "lucide-react"
-import { minutesEnHeure } from "@/lib/utils"
+import { minutesEnHeure, heureEnMinutes } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 
-type Employe     = { id: string; prenom: string; nom: string; poste: string; matricule: string; userRole?: string | null }
+type Employe     = { id: string; prenom: string; nom: string; poste: string; matricule: string; typeContrat?: string | null; roleOrg?: string | null; userRole?: string | null }
 type Shift       = { id: string; nom: string; heureDebut: string; heureFin: string; couleur: string; description: string | null }
 type AffResult   = { id: string; dateDebut: string; dateFin: string; employe: { prenom: string; nom: string; poste: string; utilisateur?: { role: string } | null }; shift: Shift }
 type AffCal      = { id: string; employeId: string; shiftId: string; dateDebut: string; dateFin: string; employe: { id: string; prenom: string; nom: string; poste: string }; shift: Shift }
@@ -23,6 +23,7 @@ type Presence    = {
   id: string; date: string; heureArrivee: string | null; heureDepart: string | null
   heuresTravaillees: number | null; minutesRetard: number; statut: string; notes: string | null
   saisieManuelle: boolean; statutValidation: string; saisieParNom: string | null; motifManuel: string | null
+  heuresSupBrutes: number; statutHeuresSup: string; heureFinShiftRef: string | null
   employe: { prenom: string; nom: string; matricule: string; poste: string }
 }
 
@@ -93,13 +94,14 @@ function presencePour(pres: PresCal[], employeId: string, day: Date): PresCal | 
   return pres.find(p => p.employe.id === employeId && p.date?.split("T")[0] === d)
 }
 
-function isResponsable(role?: string | null) {
-  return role === "RESPONSABLE" || role === "ADMIN"
+function isResponsable(roleOrg?: string | null, userRole?: string | null) {
+  const r = roleOrg ?? userRole
+  return r === "RESPONSABLE" || r === "ADMIN" || r === "RH"
 }
 
 function RoleBadge({ role }: { role?: string | null }) {
   if (!role || role === "EMPLOYE") return null
-  if (isResponsable(role)) {
+  if (isResponsable(role, null)) {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
         <Crown className="h-2.5 w-2.5" /> Resp.
@@ -110,6 +112,22 @@ function RoleBadge({ role }: { role?: string | null }) {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">RH</span>
   }
   return null
+}
+
+// ── Calcul prévisualisation heures supp ─────────────────────────────────────
+function previewHS(arrivee: string, depart: string, finShift: string): { normal: number; sup: number } | null {
+  if (!arrivee || !depart || !finShift) return null
+  const debut = heureEnMinutes(arrivee)
+  const fin   = heureEnMinutes(depart)
+  const fs    = heureEnMinutes(finShift)
+  if (fin <= fs) return null
+  return { normal: Math.max(0, fs - debut) / 60, sup: (fin - fs) / 60 }
+}
+
+const HS_CFG = {
+  EN_ATTENTE: { label: "HS à valider",   color: "#d97706", bg: "#fffbeb", border: "#fde68a" },
+  VALIDEE:    { label: "HS validées",    color: "#059669", bg: "#ecfdf5", border: "#6ee7b7" },
+  REJETEE:    { label: "HS rejetées",    color: "#dc2626", bg: "#fef2f2", border: "#fca5a5" },
 }
 
 // ── Durée d'un shift ────────────────────────────────────────────────────────
@@ -159,16 +177,25 @@ export default function HorairesPage() {
   // ── Saisie manuelle ─────────────────────────────────────────────────────────
   const [saisiesManuelle, setSaisiesManuelle] = useState<Presence[]>([])
   const [saisiesMLoading, setSaisiesMLoading] = useState(false)
-  const [validating, setValidating] = useState<string | null>(null)
+  const [validating,   setValidating]   = useState<string | null>(null)
+  const [validatingHS, setValidatingHS] = useState<string | null>(null)
   const [formManuel, setFormManuel] = useState({
     employeId: "", date: new Date().toISOString().split("T")[0],
-    heureArrivee: "", heureDepart: "", motifManuel: "Rattrapage de données", notes: "",
+    heureArrivee: "", heureDepart: "", heureFinShiftRef: "",
+    motifManuel: "Rattrapage de données", notes: "",
   })
   const [savingManuel, setSavingManuel] = useState(false)
 
   // ── Composition équipes ──────────────────────────────────────────────────────
-  const [equipesPeriode, setEquipesPeriode] = useState({ dateDebut: "", dateFin: "" })
+  const [equipesPeriode, setEquipesPeriode] = useState(() => {
+    const now   = new Date()
+    const y     = now.getFullYear()
+    const m     = String(now.getMonth() + 1).padStart(2, "0")
+    const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    return { dateDebut: `${y}-${m}-01`, dateFin: `${y}-${m}-${last}` }
+  })
   const [equipesData,    setEquipesData]    = useState<AffCal[] | null>(null)
+  const [equipesError,   setEquipesError]   = useState<string | null>(null)
   const [equipesLoading, setEquipesLoading] = useState(false)
   const [randomLoading,  setRandomLoading]  = useState(false)
   const [randomResult,   setRandomResult]   = useState<AffResult[] | null>(null)
@@ -212,6 +239,14 @@ export default function HorairesPage() {
       .then(d => { if (d) setCalData(d) })
       .finally(() => setCalLoading(false))
   }, [onglet, semaineOffset])
+
+  // ── Auto-chargement composition équipes ────────────────────────────────────
+  useEffect(() => {
+    if (onglet !== "equipes") return
+    if (!equipesPeriode.dateDebut || !equipesPeriode.dateFin) return
+    chargerEquipes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onglet])
 
   const employesSansPresence = employes.filter(e => !presences.some(p => p.employe.matricule === e.matricule))
   const heuresTotales = presences.reduce((a, p) => a + (p.heuresTravaillees ?? 0), 0)
@@ -270,10 +305,31 @@ export default function HorairesPage() {
       const p = await res.json()
       const emp = employes.find(x => x.id === formManuel.employeId)
       setSaisiesManuelle(prev => [{ ...p, employe: emp! }, ...prev])
-      setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", motifManuel: "Rattrapage de données", notes: "" })
+      setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
       toast.success("Saisie soumise — en attente de validation administrateur")
     } else { toast.error("Erreur lors de la soumission") }
     setSavingManuel(false)
+  }
+
+  // ── Heures supplémentaires — valider/rejeter (ADMIN) ────────────────────────
+  async function validerHS(id: string, action: "VALIDER_HS" | "REJETER_HS") {
+    setValidatingHS(id)
+    const res = await fetch(`/api/presences/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setPresences(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
+      setSaisiesManuelle(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
+      toast.success(
+        action === "VALIDER_HS"
+          ? "Heures supplémentaires validées"
+          : "Heures supplémentaires rejetées — 8h comptabilisées"
+      )
+    } else { toast.error("Erreur lors de la validation des HS") }
+    setValidatingHS(null)
   }
 
   // ── Saisie manuelle — valider/rejeter ────────────────────────────────────────
@@ -347,13 +403,25 @@ export default function HorairesPage() {
     if (!equipesPeriode.dateDebut || !equipesPeriode.dateFin) return
     setEquipesLoading(true)
     setEquipesData(null)
+    setEquipesError(null)
     setRandomResult(null)
-    const res = await fetch(`/api/affectations?from=${equipesPeriode.dateDebut}&to=${equipesPeriode.dateFin}`)
-    if (res.ok) {
-      const d = await res.json()
-      setEquipesData(d.affectations ?? [])
-    } else { toast.error("Erreur de chargement") }
-    setEquipesLoading(false)
+    try {
+      const res = await fetch(`/api/affectations?from=${equipesPeriode.dateDebut}&to=${equipesPeriode.dateFin}`)
+      if (res.ok) {
+        const d = await res.json()
+        setEquipesData(d.affectations ?? [])
+      } else {
+        const err = await res.json().catch(() => ({ message: `Erreur ${res.status}` }))
+        setEquipesError(err.message ?? `Erreur ${res.status}`)
+        toast.error("Erreur de chargement des équipes")
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erreur réseau"
+      setEquipesError(msg)
+      toast.error("Impossible de joindre le serveur")
+    } finally {
+      setEquipesLoading(false)
+    }
   }
 
   // ── Équipes — retirer un membre ──────────────────────────────────────────────
@@ -501,72 +569,211 @@ export default function HorairesPage() {
 
   // ── PDF planning équipes ──────────────────────────────────────────────────────
   async function downloadEquipesPDF() {
-    const data = equipesData ?? []
-    if (data.length === 0) { toast.error("Aucune affectation à exporter"); return }
-    const { jsPDF } = await import("jspdf")
-    const { default: autoTable } = await import("jspdf-autotable")
-    const doc   = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-    const w     = doc.internal.pageSize.getWidth()
-    const pageH = doc.internal.pageSize.getHeight()
-    const NAVY  = [26, 52, 97]   as [number,number,number]
-    const GREEN = [122, 179, 46] as [number,number,number]
-    const SLATE = [51, 65, 85]   as [number,number,number]
-    const GREY  = [100, 116, 139] as [number,number,number]
-    const m = 14
+    const allData = equipesData ?? []
+    if (allData.length === 0) { toast.error("Aucune affectation à exporter"); return }
 
-    // Logo
+    const { jsPDF } = await import("jspdf")
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+
+    const W = 297, H = 210
+    const ML = 12, MR = 12
+    const TW = W - ML - MR
+
+    const NAVY  : [number,number,number] = [26, 52, 97]
+    const GREEN : [number,number,number] = [122, 179, 46]
+    const SLATE : [number,number,number] = [51, 65, 85]
+    const GREY  : [number,number,number] = [107, 114, 128]
+    const WHITE : [number,number,number] = [255, 255, 255]
+    const LIGHT : [number,number,number] = [248, 250, 252]
+    const BORDER: [number,number,number] = [220, 226, 236]
+
+    function hex2rgb(hex: string): [number, number, number] {
+      const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+      return r ? [parseInt(r[1], 16), parseInt(r[2], 16), parseInt(r[3], 16)] : [99, 102, 241]
+    }
+    function lighten(rgb: [number,number,number], f = 0.88): [number,number,number] {
+      return rgb.map(c => Math.round(c + (255 - c) * f)) as [number,number,number]
+    }
+    function fitText(text: string, maxW: number): string {
+      if (doc.getTextWidth(text) <= maxW) return text
+      let t = text
+      while (t.length > 1 && doc.getTextWidth(t + "...") > maxW) t = t.slice(0, -1)
+      return t + "..."
+    }
+
+    // ── HEADER ──────────────────────────────────────────────────────
+    let y = 8
+
     try {
       const blob = await fetch("/logo-sanovia.png").then(r => r.blob())
       const b64: string = await new Promise((res, rej) => {
         const rd = new FileReader(); rd.onload = () => res(rd.result as string); rd.onerror = rej; rd.readAsDataURL(blob)
       })
-      doc.addImage(b64, "PNG", m, 7, 55, 13.4)
+      doc.addImage(b64, "PNG", ML, y, 42, 10.3)
     } catch {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
-      doc.text("SANOVIA HEALTH CARE", m, 16)
+      doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...NAVY)
+      doc.text("SANOVIA HEALTH CARE", ML, y + 7)
     }
-    doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.line(0, 26, w, 26)
 
-    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
-    doc.text("COMPOSITION DES ÉQUIPES", m, 36)
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GREY)
     const fromLabel = new Date(equipesPeriode.dateDebut + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
     const toLabel   = new Date(equipesPeriode.dateFin   + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
-    doc.text(`Période : du ${fromLabel} au ${toLabel}`, m, 43)
-    doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`, m, 49)
 
-    const rows = shifts.map(shift => {
-      const membres = data.filter(a => a.shiftId === shift.id)
-      const noms    = membres.map(a => `${a.employe.prenom} ${a.employe.nom} (${a.employe.poste})`).join("\n") || "—"
-      return [shift.nom, `${shift.heureDebut} – ${shift.heureFin}`, membres.length.toString(), noms]
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+    doc.text("COMPOSITION DES EQUIPES", W - MR, y + 5, { align: "right" })
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...GREY)
+    doc.text(`Periode : ${fromLabel} - ${toLabel}`, W - MR, y + 11, { align: "right" })
+    doc.text(`Genere le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`, W - MR, y + 16, { align: "right" })
+
+    y += 20
+    doc.setDrawColor(...GREEN); doc.setLineWidth(0.8)
+    doc.line(ML, y, W - MR, y)
+    y += 4
+
+    // ── STATS BAR ───────────────────────────────────────────────────
+    const activeShifts = shifts.filter(s => allData.some(a => a.shiftId === s.id))
+    const totalEmps    = new Set(allData.map(a => a.employe.id)).size
+
+    doc.setFillColor(...LIGHT); doc.setDrawColor(...BORDER); doc.setLineWidth(0.25)
+    doc.roundedRect(ML, y, TW, 8, 1.5, 1.5, "FD")
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...SLATE)
+    doc.text(
+      `${totalEmps} salarie(s) affecte(s)  |  ${activeShifts.length} equipe(s)  |  Periode : ${fromLabel} au ${toLabel}`,
+      W / 2, y + 5.3, { align: "center" }
+    )
+    y += 12
+
+    // ── SHIFT CARDS ─────────────────────────────────────────────────
+    const NCOLS    = Math.min(activeShifts.length, 3)
+    const CARD_GAP = 5
+    const cardW    = (TW - CARD_GAP * (NCOLS - 1)) / NCOLS
+    const HDR_H    = 15
+    const ROW_H    = 9
+    const FOOT_H   = 6
+
+    // Group into rows of NCOLS
+    const cardRows: { shift: typeof activeShifts[0]; membres: typeof allData; color: [number,number,number] }[][] = []
+    for (let i = 0; i < activeShifts.length; i += NCOLS) {
+      cardRows.push(
+        activeShifts.slice(i, i + NCOLS).map(shift => ({
+          shift,
+          membres: allData.filter(a => a.shiftId === shift.id),
+          color: hex2rgb(shift.couleur || "#6366f1"),
+        }))
+      )
+    }
+
+    cardRows.forEach((row, ri) => {
+      if (ri > 0) y += 5
+      const maxMembres = Math.max(...row.map(c => c.membres.length), 1)
+      const cardH = HDR_H + maxMembres * ROW_H + FOOT_H
+
+      row.forEach((card, ci) => {
+        const cx = ML + ci * (cardW + CARD_GAP)
+        const { shift, membres, color } = card
+        const colorLight = lighten(color, 0.88)
+        const colorMid   = lighten(color, 0.6)
+
+        // Drop shadow
+        doc.setFillColor(210, 215, 225)
+        doc.roundedRect(cx + 0.7, y + 0.7, cardW, cardH, 2.5, 2.5, "F")
+
+        // Card background
+        doc.setFillColor(...WHITE); doc.setDrawColor(...BORDER); doc.setLineWidth(0.25)
+        doc.roundedRect(cx, y, cardW, cardH, 2.5, 2.5, "FD")
+
+        // Colored header band
+        doc.setFillColor(...color)
+        doc.roundedRect(cx, y, cardW, HDR_H, 2.5, 2.5, "F")
+        doc.rect(cx, y + 5, cardW, HDR_H - 5, "F")
+
+        // Shift name
+        doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...WHITE)
+        doc.text(shift.nom.toUpperCase(), cx + 5, y + 7)
+
+        // Hours
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(230, 242, 255)
+        doc.text(`${shift.heureDebut} - ${shift.heureFin}  |  8h effectives`, cx + 5, y + 12.5)
+
+        // Effectif badge (white pill in header)
+        const bW = 13, bH = 8
+        const bX = cx + cardW - bW - 4, bY = y + (HDR_H - bH) / 2
+        doc.setFillColor(...WHITE); doc.roundedRect(bX, bY, bW, bH, 2, 2, "F")
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...color)
+        doc.text(String(membres.length), bX + bW / 2, bY + 5.8, { align: "center" })
+
+        // Member rows
+        let my = y + HDR_H
+        const nameMaxW = cardW - 16 - 8
+
+        membres.forEach((m, mi) => {
+          const emp    = employes.find(e => e.id === m.employe.id)
+          const isResp = isResponsable(emp?.roleOrg, emp?.userRole)
+
+          if (mi % 2 === 0) {
+            doc.setFillColor(...colorLight)
+            doc.rect(cx, my, cardW, ROW_H, "F")
+          }
+
+          // Avatar circle
+          const avX = cx + 7.5, avY = my + ROW_H / 2
+          doc.setFillColor(...(isResp ? color : colorMid))
+          doc.circle(avX, avY, 3, "F")
+          const initials = (m.employe.prenom[0] ?? "") + (m.employe.nom[0] ?? "")
+          doc.setFont("helvetica", "bold"); doc.setFontSize(4.5); doc.setTextColor(...WHITE)
+          doc.text(initials.toUpperCase(), avX, avY + 1.5, { align: "center" })
+
+          // Full name
+          const nameX = cx + 13
+          doc.setFont("helvetica", isResp ? "bold" : "normal")
+          doc.setFontSize(7.5)
+          doc.setTextColor(...(isResp ? color : SLATE))
+          doc.text(fitText(`${m.employe.prenom} ${m.employe.nom}`, nameMaxW), nameX, my + 4)
+
+          // Poste
+          doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(...GREY)
+          doc.text(fitText(m.employe.poste || "", nameMaxW + 4), nameX, my + 8)
+
+          // Responsable star
+          if (isResp) {
+            doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...color)
+            doc.text("*", cx + cardW - 5, my + 5.5)
+          }
+
+          my += ROW_H
+        })
+
+        // Card footer
+        const footTop = y + HDR_H + maxMembres * ROW_H
+        doc.setFillColor(...LIGHT); doc.rect(cx, footTop, cardW, FOOT_H, "F")
+        doc.setDrawColor(...BORDER); doc.setLineWidth(0.2)
+        doc.line(cx, footTop, cx + cardW, footTop)
+        doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(...GREY)
+        doc.text(`Effectif : ${membres.length} salarie(s)`, cx + 4, footTop + 4)
+
+        // Redraw outer border on top of fills
+        doc.setDrawColor(...BORDER); doc.setLineWidth(0.3)
+        doc.roundedRect(cx, y, cardW, cardH, 2.5, 2.5, "S")
+      })
+
+      y += HDR_H + maxMembres * ROW_H + FOOT_H
     })
 
-    autoTable(doc, {
-      startY: 55,
-      head: [["Shift", "Horaires", "Effectif", "Membres"]],
-      body: rows,
-      headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: "bold", fontSize: 10 },
-      bodyStyles: { fontSize: 9, textColor: SLATE },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 38 }, 1: { cellWidth: 28, halign: "center" }, 2: { cellWidth: 18, halign: "center" } },
-      styles: { cellPadding: 4, overflow: "linebreak" },
-      margin: { left: m, right: m },
-    })
-
-    // Pied de page SANOVIA
-    const footH = 18
-    doc.setFillColor(...NAVY); doc.rect(0, pageH - footH, w, footH, "F")
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255,255,255)
-    doc.text("SANOVIA Health Care", w / 2, pageH - footH + 5, { align: "center" })
-    doc.setFont("helvetica", "normal"); doc.setFontSize(6.8)
-    doc.text("Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   Société à responsabilité limitée",
-      w / 2, pageH - footH + 10, { align: "center" })
-    doc.text("NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707",
-      w / 2, pageH - footH + 15, { align: "center" })
+    // ── FOOTER ──────────────────────────────────────────────────────
+    const footY = H - 13
+    doc.setFillColor(...NAVY); doc.rect(0, footY, W, 13, "F")
+    doc.setFillColor(...GREEN); doc.rect(0, footY, W, 1, "F")
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...WHITE)
+    doc.text("SANOVIA Health Care", W / 2, footY + 4.5, { align: "center" })
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6)
+    doc.text("Tel : 656 67 67 67 - 670 44 55 68  |  shcdg@sanoviahc.com  |  Societe a responsabilite limitee", W / 2, footY + 8, { align: "center" })
+    doc.text("NUI : M0925180497774J  /  RCCM : CM-NSI-02-2025-B12-00707", W / 2, footY + 11.5, { align: "center" })
 
     doc.save(`equipes-${equipesPeriode.dateDebut}-${equipesPeriode.dateFin}.pdf`)
     toast.success("Planning téléchargé")
   }
+
+  // Salariés uniquement (pas de prestataires dans les équipes)
+  const salaries = employes.filter(e => e.typeContrat !== "PRESTATAIRE")
 
   // ── Équipes — données par shift ──────────────────────────────────────────────
   function membresParShift(shiftId: string): AffCal[] {
@@ -575,10 +782,10 @@ export default function HorairesPage() {
 
   function empDisponibles(shiftId: string): Employe[] {
     const dejaDans = new Set((equipesData ?? []).filter(a => a.shiftId === shiftId).map(a => a.employe.id))
-    return employes.filter(e => !dejaDans.has(e.id))
+    return salaries.filter(e => !dejaDans.has(e.id))
   }
 
-  const responsablesCount = employes.filter(e => isResponsable(e.userRole)).length
+  const responsablesCount = salaries.filter(e => isResponsable(e.roleOrg, e.userRole)).length
 
   return (
     <div className="space-y-6">
@@ -592,7 +799,9 @@ export default function HorairesPage() {
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto w-full sm:w-fit flex-shrink-0">
         {TABS.map(t => {
-          const pendingManuel = t.id === "manuel" ? saisiesManuelle.filter(s => s.statutValidation === "EN_ATTENTE").length : 0
+          const pendingManuel = t.id === "manuel"
+            ? saisiesManuelle.filter(s => s.statutValidation === "EN_ATTENTE" || s.statutHeuresSup === "EN_ATTENTE").length
+            : 0
           return (
             <button key={t.id} onClick={() => setOnglet(t.id as typeof onglet)}
               className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
@@ -760,7 +969,43 @@ export default function HorairesPage() {
                         </td>
                         <td className="px-6 py-3.5 text-sm font-mono text-slate-700">{p.heureArrivee ?? "—"}</td>
                         <td className="px-6 py-3.5 text-sm font-mono text-slate-700">{p.heureDepart ?? "—"}</td>
-                        <td className="px-6 py-3.5 text-sm text-slate-700">{p.heuresTravaillees != null ? `${p.heuresTravaillees.toFixed(1)}h` : "—"}</td>
+                        <td className="px-6 py-3.5">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm text-slate-700">{p.heuresTravaillees != null ? `${p.heuresTravaillees.toFixed(1)}h` : "—"}</span>
+                            {p.statutHeuresSup === "EN_ATTENTE" && (
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-fit"
+                                  style={{ background: HS_CFG.EN_ATTENTE.bg, color: HS_CFG.EN_ATTENTE.color, border: `1px solid ${HS_CFG.EN_ATTENTE.border}` }}>
+                                  <Timer className="h-2.5 w-2.5" /> +{p.heuresSupBrutes.toFixed(1)}h HS
+                                </span>
+                                {isAdmin && (
+                                  <div className="flex gap-1">
+                                    <button onClick={() => validerHS(p.id, "VALIDER_HS")} disabled={validatingHS === p.id}
+                                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-60">
+                                      {validatingHS === p.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Check className="h-2.5 w-2.5" />} Valider
+                                    </button>
+                                    <button onClick={() => validerHS(p.id, "REJETER_HS")} disabled={validatingHS === p.id}
+                                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60">
+                                      <X className="h-2.5 w-2.5" /> Rejeter
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {p.statutHeuresSup === "VALIDEE" && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-fit"
+                                style={{ background: HS_CFG.VALIDEE.bg, color: HS_CFG.VALIDEE.color, border: `1px solid ${HS_CFG.VALIDEE.border}` }}>
+                                <Check className="h-2.5 w-2.5" /> +{p.heuresSupBrutes.toFixed(1)}h HS ✓
+                              </span>
+                            )}
+                            {p.statutHeuresSup === "REJETEE" && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-fit"
+                                style={{ background: HS_CFG.REJETEE.bg, color: HS_CFG.REJETEE.color, border: `1px solid ${HS_CFG.REJETEE.border}` }}>
+                                <X className="h-2.5 w-2.5" /> HS rejetées
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-3.5 text-sm">
                           {p.minutesRetard > 0
                             ? <span className="font-semibold text-red-500">+{minutesEnHeure(p.minutesRetard)}</span>
@@ -836,10 +1081,39 @@ export default function HorairesPage() {
                   <Input type="time" value={formManuel.heureDepart} onChange={e => setFormManuel(p => ({ ...p, heureDepart: e.target.value }))} className="h-9" required />
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600">Shift de référence (fin)</Label>
+                  <Select value={formManuel.heureFinShiftRef} onValueChange={v => setFormManuel(p => ({ ...p, heureFinShiftRef: v }))}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Aucun cap d'heures" /></SelectTrigger>
+                    <SelectContent>
+                      {shifts.map(s => (
+                        <SelectItem key={s.id} value={s.heureFin}>{s.nom} — fin à {s.heureFin}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-slate-600">Observation</Label>
                   <Input value={formManuel.notes} onChange={e => setFormManuel(p => ({ ...p, notes: e.target.value }))} placeholder="Précisions…" className="h-9" />
                 </div>
               </div>
+
+              {/* Prévisualisation HS */}
+              {(() => {
+                const hs = previewHS(formManuel.heureArrivee, formManuel.heureDepart, formManuel.heureFinShiftRef)
+                if (!hs) return null
+                return (
+                  <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <Timer className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-semibold">Dépassement de shift détecté</p>
+                      <p className="text-xs mt-0.5">
+                        Heures autorisées : <strong>{hs.normal.toFixed(1)}h</strong> — Heures supplémentaires : <strong>+{hs.sup.toFixed(1)}h</strong> (validation admin requise)
+                      </p>
+                    </div>
+                  </div>
+                )
+              })()}
+
               <div className="mt-4 flex items-center justify-between">
                 <p className="text-xs text-slate-400">Saisi par : <span className="font-medium text-slate-600">{userName}</span></p>
                 <button type="submit" disabled={savingManuel}
@@ -904,6 +1178,19 @@ export default function HorairesPage() {
                               </span>
                               <span className="font-mono">{s.heureArrivee} → {s.heureDepart}</span>
                               {s.heuresTravaillees != null && <span className="font-semibold text-indigo-600">{s.heuresTravaillees.toFixed(1)}h</span>}
+                              {/* Badge HS */}
+                              {s.statutHeuresSup !== "N/A" && s.heuresSupBrutes > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                  style={{
+                                    background: HS_CFG[s.statutHeuresSup as keyof typeof HS_CFG]?.bg,
+                                    color: HS_CFG[s.statutHeuresSup as keyof typeof HS_CFG]?.color,
+                                    border: `1px solid ${HS_CFG[s.statutHeuresSup as keyof typeof HS_CFG]?.border}`,
+                                  }}>
+                                  <Timer className="h-2.5 w-2.5" /> +{s.heuresSupBrutes.toFixed(1)}h HS
+                                  {s.statutHeuresSup === "VALIDEE" && " ✓"}
+                                  {s.statutHeuresSup === "REJETEE" && " ✗"}
+                                </span>
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 mt-1.5">
                               {s.motifManuel && (
@@ -917,23 +1204,38 @@ export default function HorairesPage() {
                           </div>
                         </div>
 
-                        {/* Boutons validation (admin seulement, saisies en attente seulement) */}
-                        {isAdmin && isPending && (
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <button onClick={() => validerSaisie(s.id, "VALIDER")}
-                              disabled={validating === s.id}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-60 transition-colors">
-                              {validating === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                              Valider
-                            </button>
-                            <button onClick={() => validerSaisie(s.id, "REJETER")}
-                              disabled={validating === s.id}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60 transition-colors">
-                              {validating === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldX className="h-3.5 w-3.5" />}
-                              Rejeter
-                            </button>
-                          </div>
-                        )}
+                        {/* Boutons validation saisie + HS */}
+                        <div className="flex flex-col gap-2 flex-shrink-0">
+                          {isAdmin && isPending && (
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => validerSaisie(s.id, "VALIDER")}
+                                disabled={validating === s.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-60 transition-colors">
+                                {validating === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                                Valider saisie
+                              </button>
+                              <button onClick={() => validerSaisie(s.id, "REJETER")}
+                                disabled={validating === s.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60 transition-colors">
+                                {validating === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldX className="h-3.5 w-3.5" />}
+                                Rejeter
+                              </button>
+                            </div>
+                          )}
+                          {isAdmin && s.statutHeuresSup === "EN_ATTENTE" && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-amber-600 font-semibold">HS +{s.heuresSupBrutes.toFixed(1)}h :</span>
+                              <button onClick={() => validerHS(s.id, "VALIDER_HS")} disabled={validatingHS === s.id}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-60">
+                                {validatingHS === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Valider HS
+                              </button>
+                              <button onClick={() => validerHS(s.id, "REJETER_HS")} disabled={validatingHS === s.id}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60">
+                                <X className="h-3 w-3" /> Rejeter HS
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )
@@ -1135,7 +1437,7 @@ export default function HorairesPage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Affectation aléatoire</p>
                       <p className="text-xs text-slate-400">
-                        Répartit les {employes.length} employés sur {shifts.length} shift(s) — garantit 1 responsable par shift
+                        Répartit les {salaries.length} salarié(s) sur {shifts.length} shift(s) — garantit 1 responsable par shift
                         {responsablesCount < shifts.length && (
                           <span className="text-amber-600"> · ⚠ seulement {responsablesCount} responsable(s) pour {shifts.length} shift(s)</span>
                         )}
@@ -1165,7 +1467,20 @@ export default function HorairesPage() {
               </div>
 
               {/* Grille shifts */}
-              {equipesData === null ? (
+              {equipesError && (
+                <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-800">Erreur de chargement</p>
+                    <p className="text-xs text-red-600 mt-0.5">{equipesError}</p>
+                  </div>
+                </div>
+              )}
+              {equipesLoading ? (
+                <div className="flex items-center justify-center py-16 rounded-xl border border-slate-200 bg-white">
+                  <Loader2 className="h-7 w-7 animate-spin text-slate-300" />
+                </div>
+              ) : equipesData === null ? (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center py-12">
                   <Users className="h-8 w-8 mx-auto mb-3 text-slate-300" />
                   <p className="text-sm text-slate-400">Choisissez une période et cliquez sur &ldquo;Charger&rdquo;</p>
@@ -1190,7 +1505,7 @@ export default function HorairesPage() {
                       const membres = membresParShift(shift.id)
                       const aResp   = membres.some(m => {
                         const emp = employes.find(e => e.id === m.employe.id)
-                        return isResponsable(emp?.userRole)
+                        return isResponsable(emp?.roleOrg, emp?.userRole)
                       })
                       const disponibles = empDisponibles(shift.id)
 
@@ -1259,7 +1574,7 @@ export default function HorairesPage() {
                                   <option value="">Choisir un employé…</option>
                                   {disponibles.map(e => (
                                     <option key={e.id} value={e.id}>
-                                      {e.prenom} {e.nom}{isResponsable(e.userRole) ? " 👑" : ""}
+                                      {e.prenom} {e.nom}{isResponsable(e.roleOrg, e.userRole) ? " 👑" : ""}
                                     </option>
                                   ))}
                                 </select>
@@ -1287,7 +1602,7 @@ export default function HorairesPage() {
                     })}
                   </div>
 
-                  {shifts.some(s => !membresParShift(s.id).some(m => isResponsable(employes.find(e => e.id === m.employe.id)?.userRole))) && (
+                  {shifts.some(s => !membresParShift(s.id).some(m => { const emp = employes.find(e => e.id === m.employe.id); return isResponsable(emp?.roleOrg, emp?.userRole) })) && (
                     <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                       <Info className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                       <p className="text-sm text-amber-800">

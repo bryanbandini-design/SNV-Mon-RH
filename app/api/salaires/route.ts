@@ -12,7 +12,7 @@ export async function GET() {
   if (error) return error
 
   const salaires = await prisma.historiqueSalaire.findMany({
-    include: { employe: { select: { id: true, prenom: true, nom: true, matricule: true, poste: true } } },
+    include: { employe: { select: { id: true, prenom: true, nom: true, matricule: true, poste: true, typeContrat: true } } },
     orderBy: [{ annee: "desc" }, { mois: "desc" }],
   })
   return NextResponse.json(salaires, {

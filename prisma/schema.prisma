@@ -55,6 +55,7 @@ model Employe {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  roleOrg                String    @default("EMPLOYE")  // EMPLOYE | RESPONSABLE | RH | ADMIN (rôle organisationnel, indépendant du compte)
   faceDescriptor         String?   // JSON : Float32Array[128] sérialisé pour face-api.js
   managerId              String?   // référence vers un autre Employe (organigramme)
   contactUrgenceNom      String?
@@ -386,6 +387,10 @@ model Presence {
   statutValidation  String   @default("VALIDEE")  // VALIDEE | EN_ATTENTE | REJETEE
   saisieParNom      String?  // nom de la personne ayant saisi
   motifManuel       String?  // motif de la saisie manuelle
+  // ── Heures supplémentaires (validation admin obligatoire) ──────────────────
+  heuresSupBrutes   Float    @default(0)      // heures au-delà de la fin de shift
+  statutHeuresSup   String   @default("N/A")  // N/A | EN_ATTENTE | VALIDEE | REJETEE
+  heureFinShiftRef  String?                   // fin de shift de référence ex: "15:30"
   createdAt         DateTime @default(now())
 
   employe        Employe         @relation(fields: [employeId], references: [id], onDelete: Cascade)

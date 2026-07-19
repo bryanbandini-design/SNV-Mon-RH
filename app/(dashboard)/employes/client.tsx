@@ -111,8 +111,8 @@ export function EmployeesClient({ employes }: { employes: Employe[] }) {
   return (
     <div className="space-y-4">
       {/* Filtres */}
-      <div className="flex flex-wrap gap-2 sm:gap-3 items-start sm:items-center">
-        <div className="relative w-full sm:flex-1 sm:max-w-xs">
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             placeholder="Rechercher un employé…"

@@ -11,7 +11,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!decl) return NextResponse.json({ message: "Non trouvé" }, { status: 404 })
 
   const salaires = await prisma.historiqueSalaire.findMany({
-    where:   { mois: decl.mois, annee: decl.annee, statut: "PAYE" },
+    where: {
+      mois:    decl.mois,
+      annee:   decl.annee,
+      statut:  "PAYE",
+      employe: { typeContrat: { not: "PRESTATAIRE" } },
+    },
     include: { employe: { select: { prenom: true, nom: true, matricule: true, poste: true, departement: true } } },
     orderBy: { employe: { nom: "asc" } },
   })

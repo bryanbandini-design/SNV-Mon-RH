@@ -15,6 +15,7 @@ export async function GET() {
   const result = employes.map(({ utilisateur, ...e }) => ({
     ...e,
     userRole: utilisateur?.role ?? null,
+    // roleOrg est déjà dans ...e
   }))
   return NextResponse.json(result, {
     headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=120" },
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
       salaireBase: parseFloat(data.salaireBase),
       notes: data.notes || null,
       managerId: data.managerId || null,
+      roleOrg: data.roleOrg || "EMPLOYE",
     },
   })
 

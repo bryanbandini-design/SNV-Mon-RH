@@ -118,7 +118,7 @@ export function DashboardShell({ children, userName, userInitial }: Props) {
 
         {/* ── Contenu ────────────────────────────────────────────────────── */}
         <main className="flex-1 overflow-auto bg-slate-50">
-          <div className="max-w-7xl mx-auto p-3 sm:p-4 lg:p-6" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>{children}</div>
+          <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>{children}</div>
         </main>
       </div>
     </div>

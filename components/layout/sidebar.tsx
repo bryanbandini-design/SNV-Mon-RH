@@ -199,6 +199,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: {
 
   function canSee(perm?: PermKey) {
     if (!perm) return true
+    if (role === "ADMIN") return true
     return permissions.includes(perm)
   }
   const initial  = session?.user?.name?.[0]?.toUpperCase() ?? "A"

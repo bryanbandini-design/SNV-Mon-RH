@@ -42,18 +42,34 @@ export async function POST(req: Request) {
 
   const data = await req.json()
 
-  // Calcul des heures travaillées et du retard
+  // Calcul des heures travaillées, retard, et heures supplémentaires
   let heuresTravaillees: number | null = null
   let minutesRetard = 0
+  let heuresSupBrutes = 0
+  let statutHeuresSup = "N/A"
 
   if (data.heureArrivee && data.heureDepart) {
-    const debut = heureEnMinutes(data.heureArrivee)
-    const fin = heureEnMinutes(data.heureDepart)
-    heuresTravaillees = Math.max(0, (fin - debut)) / 60
+    const debut   = heureEnMinutes(data.heureArrivee)
+    const fin     = heureEnMinutes(data.heureDepart)
+    const rawMin  = Math.max(0, fin - debut)
+
+    if (data.heureFinShiftRef) {
+      const finShift = heureEnMinutes(data.heureFinShiftRef)
+      if (fin > finShift) {
+        // Dépassement de shift : cap à l'heure de fin, HS en attente de validation
+        heuresTravaillees = Math.max(0, finShift - debut) / 60
+        heuresSupBrutes   = (fin - finShift) / 60
+        statutHeuresSup   = "EN_ATTENTE"
+      } else {
+        heuresTravaillees = rawMin / 60
+      }
+    } else {
+      heuresTravaillees = rawMin / 60
+    }
   }
 
   if (data.heureArrivee && data.heureReferenceDebut) {
-    const arrivee = heureEnMinutes(data.heureArrivee)
+    const arrivee   = heureEnMinutes(data.heureArrivee)
     const reference = heureEnMinutes(data.heureReferenceDebut)
     minutesRetard = Math.max(0, arrivee - reference)
   }
@@ -76,10 +92,12 @@ export async function POST(req: Request) {
       statut,
       notes: data.notes || null,
       saisieManuelle: isManuel,
-      // Admin/RH : validation automatique (rattrapage de données)
       statutValidation: isAdminOrRH ? "VALIDEE" : (isManuel ? "EN_ATTENTE" : "VALIDEE"),
       saisieParNom: data.saisieParNom || null,
       motifManuel: data.motifManuel || null,
+      heuresSupBrutes,
+      statutHeuresSup,
+      heureFinShiftRef: data.heureFinShiftRef || null,
     },
   })
 

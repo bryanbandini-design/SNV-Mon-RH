@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Loader2, FlaskConical, Trash2 } from "lucide-react"
+import { ArrowLeft, Loader2, FlaskConical, Trash2, ShieldCheck } from "lucide-react"
 import Link from "next/link"
-import { TYPES_CONTRAT, STATUTS_EMPLOYE } from "@/lib/utils"
+import { TYPES_CONTRAT, TYPES_CONTRAT_LABELS, STATUTS_EMPLOYE, ROLES_ORG, ROLES_ORG_LABELS } from "@/lib/utils"
 import { toast } from "sonner"
 
 export default function ModifierEmployePage() {
@@ -18,8 +18,8 @@ export default function ModifierEmployePage() {
   const params = useParams()
   const id = params.id as string
 
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [loading,      setLoading]      = useState(false)
+  const [saving,       setSaving]       = useState(false)
   const [periodeEssai, setPeriodeEssai] = useState(false)
   const [form, setForm] = useState<Record<string, string>>({})
   const [employes, setEmployes] = useState<{ id: string; prenom: string; nom: string; poste: string }[]>([])
@@ -30,32 +30,33 @@ export default function ModifierEmployePage() {
       fetch(`/api/employes/${id}`).then(r => r.json()),
       fetch("/api/employes").then(r => r.json()),
     ]).then(([emp, allEmps]) => {
-        setForm({
-          prenom: emp.prenom ?? "",
-          nom: emp.nom ?? "",
-          email: emp.email ?? "",
-          telephone: emp.telephone ?? "",
-          dateNaissance: emp.dateNaissance ? emp.dateNaissance.split("T")[0] : "",
-          lieuNaissance: emp.lieuNaissance ?? "",
-          adresse: emp.adresse ?? "",
-          nationalite: emp.nationalite ?? "",
-          numeroCni: emp.numeroCni ?? "",
-          poste: emp.poste ?? "",
-          departement: emp.departement ?? "",
-          typeContrat: emp.typeContrat ?? "",
-          dateEmbauche: emp.dateEmbauche ? emp.dateEmbauche.split("T")[0] : "",
-          dateFinContrat: emp.dateFinContrat ? emp.dateFinContrat.split("T")[0] : "",
-          salaireBase: String(emp.salaireBase ?? ""),
-          statut: emp.statut ?? "ACTIF",
-          dateDebutEssai: emp.dateDebutEssai ? emp.dateDebutEssai.split("T")[0] : "",
-          dateFinEssai: emp.dateFinEssai ? emp.dateFinEssai.split("T")[0] : "",
-          notes: emp.notes ?? "",
-          managerId: emp.managerId ?? "",
-        })
-        setPeriodeEssai(emp.periodeEssai ?? false)
-        if (Array.isArray(allEmps)) setEmployes(allEmps.filter((e: { id: string }) => e.id !== id))
+      setForm({
+        prenom:         emp.prenom          ?? "",
+        nom:            emp.nom             ?? "",
+        email:          emp.email           ?? "",
+        telephone:      emp.telephone       ?? "",
+        dateNaissance:  emp.dateNaissance   ? emp.dateNaissance.split("T")[0]  : "",
+        lieuNaissance:  emp.lieuNaissance   ?? "",
+        adresse:        emp.adresse         ?? "",
+        nationalite:    emp.nationalite     ?? "",
+        numeroCni:      emp.numeroCni       ?? "",
+        matricule:      emp.matricule       ?? "",
+        poste:          emp.poste           ?? "",
+        departement:    emp.departement     ?? "",
+        typeContrat:    emp.typeContrat     ?? "",
+        roleOrg:        emp.roleOrg         ?? "EMPLOYE",
+        statut:         emp.statut          ?? "ACTIF",
+        dateEmbauche:   emp.dateEmbauche    ? emp.dateEmbauche.split("T")[0]   : "",
+        dateFinContrat: emp.dateFinContrat  ? emp.dateFinContrat.split("T")[0] : "",
+        salaireBase:    String(emp.salaireBase ?? ""),
+        managerId:      emp.managerId       ?? "",
+        dateDebutEssai: emp.dateDebutEssai  ? emp.dateDebutEssai.split("T")[0] : "",
+        dateFinEssai:   emp.dateFinEssai    ? emp.dateFinEssai.split("T")[0]   : "",
+        notes:          emp.notes           ?? "",
       })
-      .finally(() => setLoading(false))
+      setPeriodeEssai(emp.periodeEssai ?? false)
+      if (Array.isArray(allEmps)) setEmployes(allEmps.filter((e: { id: string }) => e.id !== id))
+    }).finally(() => setLoading(false))
   }, [id])
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
@@ -103,12 +104,12 @@ export default function ModifierEmployePage() {
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={handleDelete} className="text-red-600 border-red-200 hover:bg-red-50">
-          <Trash2 className="h-4 w-4" />
-          Supprimer
+          <Trash2 className="h-4 w-4" /> Supprimer
         </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* ── Informations personnelles ── */}
         <Card>
           <CardHeader><CardTitle className="text-sm">Informations personnelles</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -124,21 +125,35 @@ export default function ModifierEmployePage() {
           </CardContent>
         </Card>
 
+        {/* ── Informations professionnelles ── */}
         <Card>
           <CardHeader><CardTitle className="text-sm">Informations professionnelles</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Matricule *</Label>
+              <Input value={form.matricule ?? ""} onChange={e => set("matricule", e.target.value)} required className="font-mono" />
+            </div>
             <div className="space-y-2"><Label>Poste *</Label><Input value={form.poste ?? ""} onChange={e => set("poste", e.target.value)} required /></div>
             <div className="space-y-2"><Label>Département</Label><Input value={form.departement ?? ""} onChange={e => set("departement", e.target.value)} /></div>
             <div className="space-y-2">
               <Label>Type de contrat *</Label>
               <Select value={form.typeContrat ?? ""} onValueChange={v => set("typeContrat", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{TYPES_CONTRAT.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                <SelectContent>{TYPES_CONTRAT.map(t => <SelectItem key={t} value={t}>{TYPES_CONTRAT_LABELS[t] ?? t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-slate-400" /> Niveau de responsabilité</Label>
+              <Select value={form.roleOrg ?? "EMPLOYE"} onValueChange={v => set("roleOrg", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLES_ORG.map(r => <SelectItem key={r} value={r}>{ROLES_ORG_LABELS[r]}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Statut</Label>
-              <Select value={form.statut ?? ""} onValueChange={v => set("statut", v)}>
+              <Select value={form.statut ?? "ACTIF"} onValueChange={v => set("statut", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{STATUTS_EMPLOYE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
@@ -146,11 +161,11 @@ export default function ModifierEmployePage() {
             <div className="space-y-2"><Label>Date d&apos;embauche *</Label><Input type="date" value={form.dateEmbauche ?? ""} onChange={e => set("dateEmbauche", e.target.value)} required /></div>
             <div className="space-y-2"><Label>Fin de contrat</Label><Input type="date" value={form.dateFinContrat ?? ""} onChange={e => set("dateFinContrat", e.target.value)} /></div>
             <div className="space-y-2"><Label>Salaire de base *</Label><Input type="number" value={form.salaireBase ?? ""} onChange={e => set("salaireBase", e.target.value)} required /></div>
-            <div className="space-y-2">
-              <Label>Manager / Responsable hiérarchique</Label>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Supérieur direct</Label>
               <select value={form.managerId ?? ""} onChange={e => set("managerId", e.target.value)}
                 className="w-full h-9 text-sm border border-input rounded-md px-3 bg-background focus:outline-none focus:ring-1 focus:ring-ring">
-                <option value="">— Aucun (racine de l'organigramme)</option>
+                <option value="">— Aucun (racine de l&apos;organigramme)</option>
                 {employes.map(e => <option key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</option>)}
               </select>
             </div>
@@ -158,6 +173,7 @@ export default function ModifierEmployePage() {
           </CardContent>
         </Card>
 
+        {/* ── Période d'essai ── */}
         <Card className={periodeEssai ? "border-orange-200 bg-orange-50/30" : ""}>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -165,7 +181,8 @@ export default function ModifierEmployePage() {
                 <FlaskConical className="h-4 w-4 text-orange-500" />
                 Période d&apos;essai
               </CardTitle>
-              <div onClick={() => setPeriodeEssai(!periodeEssai)} className={`relative w-10 h-5 rounded-full cursor-pointer transition-colors ${periodeEssai ? "bg-orange-500" : "bg-slate-300"}`}>
+              <div onClick={() => setPeriodeEssai(!periodeEssai)}
+                className={`relative w-10 h-5 rounded-full cursor-pointer transition-colors ${periodeEssai ? "bg-orange-500" : "bg-slate-300"}`}>
                 <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${periodeEssai ? "translate-x-5" : ""}`} />
               </div>
             </div>

@@ -8,22 +8,24 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Loader2, FlaskConical, Download, GitBranch } from "lucide-react"
+import { ArrowLeft, Loader2, FlaskConical, Download, GitBranch, ShieldCheck } from "lucide-react"
 import Link from "next/link"
-import { TYPES_CONTRAT } from "@/lib/utils"
+import { TYPES_CONTRAT, TYPES_CONTRAT_LABELS, STATUTS_EMPLOYE, ROLES_ORG, ROLES_ORG_LABELS } from "@/lib/utils"
 import { toast } from "sonner"
 
 type EmployeOption = { id: string; prenom: string; nom: string; poste: string }
 
 export default function NouvelEmployePage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [loading,      setLoading]      = useState(false)
+  const [pdfLoading,   setPdfLoading]   = useState(false)
   const [periodeEssai, setPeriodeEssai] = useState(false)
-  const [typeContrat, setTypeContrat] = useState("")
+  const [typeContrat,  setTypeContrat]  = useState("")
+  const [roleOrg,      setRoleOrg]      = useState("EMPLOYE")
+  const [statut,       setStatut]       = useState("ACTIF")
   const [dateEmbauche, setDateEmbauche] = useState("")
-  const [managerId, setManagerId] = useState("")
-  const [employes, setEmployes] = useState<EmployeOption[]>([])
+  const [managerId,    setManagerId]    = useState("")
+  const [employes,     setEmployes]     = useState<EmployeOption[]>([])
 
   useEffect(() => {
     fetch("/api/employes").then(r => r.ok ? r.json() : []).then(d => {
@@ -46,7 +48,6 @@ export default function NouvelEmployePage() {
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error("[PDF erreur]", err)
       toast.error(`PDF : ${msg}`)
     }
     setPdfLoading(false)
@@ -59,6 +60,8 @@ export default function NouvelEmployePage() {
     const form = new FormData(e.currentTarget)
     const data = Object.fromEntries(form.entries())
     data.periodeEssai = periodeEssai ? "true" : "false"
+    data.roleOrg  = roleOrg
+    data.statut   = statut
     if (managerId) data.managerId = managerId
 
     const res = await fetch("/api/employes", {
@@ -91,11 +94,12 @@ export default function NouvelEmployePage() {
         </div>
         <Button variant="outline" type="button" onClick={telechargerFormulaire} disabled={pdfLoading} className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
           {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Télécharger le formulaire
+          Formulaire PDF
         </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* ── Informations personnelles ── */}
         <Card>
           <CardHeader><CardTitle className="text-sm">Informations personnelles</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -111,17 +115,34 @@ export default function NouvelEmployePage() {
           </CardContent>
         </Card>
 
+        {/* ── Informations professionnelles ── */}
         <Card>
           <CardHeader><CardTitle className="text-sm">Informations professionnelles</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2"><Label>Matricule *</Label><Input name="matricule" placeholder="EMP-001" required /></div>
+            <div className="space-y-2"><Label>Matricule *</Label><Input name="matricule" placeholder="EMP-001" required className="font-mono" /></div>
             <div className="space-y-2"><Label>Poste *</Label><Input name="poste" required /></div>
             <div className="space-y-2"><Label>Département</Label><Input name="departement" /></div>
             <div className="space-y-2">
               <Label>Type de contrat *</Label>
               <Select name="typeContrat" required onValueChange={setTypeContrat}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                <SelectContent>{TYPES_CONTRAT.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                <SelectContent>{TYPES_CONTRAT.map(t => <SelectItem key={t} value={t}>{TYPES_CONTRAT_LABELS[t] ?? t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-slate-400" /> Niveau de responsabilité</Label>
+              <Select value={roleOrg} onValueChange={setRoleOrg}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLES_ORG.map(r => <SelectItem key={r} value={r}>{ROLES_ORG_LABELS[r]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Statut</Label>
+              <Select value={statut} onValueChange={setStatut}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{STATUTS_EMPLOYE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
@@ -132,27 +153,21 @@ export default function NouvelEmployePage() {
             <div className="space-y-2"><Label>Salaire de base *</Label><Input name="salaireBase" type="number" min="0" step="1000" required /></div>
             <div className="space-y-2 sm:col-span-2">
               <Label className="flex items-center gap-1.5">
-                <GitBranch className="h-3.5 w-3.5 text-slate-400" />
-                Supérieur direct
+                <GitBranch className="h-3.5 w-3.5 text-slate-400" /> Supérieur direct
               </Label>
-              <select
-                value={managerId}
-                onChange={e => setManagerId(e.target.value)}
-                className="w-full h-9 text-sm border border-input rounded-md px-3 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-              >
+              <select value={managerId} onChange={e => setManagerId(e.target.value)}
+                className="w-full h-9 text-sm border border-input rounded-md px-3 bg-background focus:outline-none focus:ring-1 focus:ring-ring">
                 <option value="">— Aucun (racine de l&apos;organigramme)</option>
                 {employes.map(e => (
                   <option key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</option>
                 ))}
               </select>
-              {employes.length === 0 && (
-                <p className="text-xs text-slate-400 mt-1">Aucun autre employé — ce sera le premier nœud de l&apos;organigramme.</p>
-              )}
             </div>
             <div className="space-y-2 sm:col-span-2"><Label>Notes</Label><Textarea name="notes" rows={3} /></div>
           </CardContent>
         </Card>
 
+        {/* ── Période d'essai ── */}
         <Card className={periodeEssai ? "border-orange-200 bg-orange-50/30" : ""}>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -160,7 +175,8 @@ export default function NouvelEmployePage() {
                 <FlaskConical className="h-4 w-4 text-orange-500" />
                 Période d&apos;essai
               </CardTitle>
-              <div onClick={() => setPeriodeEssai(!periodeEssai)} className={`relative w-10 h-5 rounded-full cursor-pointer transition-colors ${periodeEssai ? "bg-orange-500" : "bg-slate-300"}`}>
+              <div onClick={() => setPeriodeEssai(!periodeEssai)}
+                className={`relative w-10 h-5 rounded-full cursor-pointer transition-colors ${periodeEssai ? "bg-orange-500" : "bg-slate-300"}`}>
                 <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${periodeEssai ? "translate-x-5" : ""}`} />
               </div>
             </div>
@@ -184,7 +200,7 @@ export default function NouvelEmployePage() {
 
         <div className="flex justify-end gap-3 pt-2">
           <Link href="/employes"><Button variant="outline" type="button">Annuler</Button></Link>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || !typeContrat}>
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             Créer l&apos;employé
           </Button>

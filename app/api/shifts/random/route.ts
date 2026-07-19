@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
   const [employes, shifts] = await Promise.all([
     prisma.employe.findMany({
-      where: { statut: "ACTIF" },
+      where: { statut: "ACTIF", typeContrat: { not: "PRESTATAIRE" } },
       select: { id: true, prenom: true, nom: true, utilisateur: { select: { id: true, role: true } } },
     }),
     prisma.shift.findMany({ orderBy: { nom: "asc" } }),

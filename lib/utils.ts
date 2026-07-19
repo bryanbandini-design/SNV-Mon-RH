@@ -22,10 +22,26 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-export const TYPES_CONTRAT = ["CDI", "CDD", "STAGE", "INTERIM", "CONSULTANT"]
+export const TYPES_CONTRAT = ["CDI", "CDD", "STAGE", "INTERIM", "CONSULTANT", "PRESTATAIRE"]
+export const TYPES_CONTRAT_LABELS: Record<string, string> = {
+  CDI:         "CDI — Contrat à durée indéterminée",
+  CDD:         "CDD — Contrat à durée déterminée",
+  STAGE:       "Stage",
+  INTERIM:     "Intérim",
+  CONSULTANT:  "Consultant",
+  PRESTATAIRE: "Prestataire de services",
+}
 export const TYPES_CONGE = ["ANNUEL", "MALADIE", "MATERNITE", "PATERNITE", "SANS_SOLDE", "EXCEPTIONNEL"]
 export const TYPES_DISCIPLINAIRE = ["DEMANDE_EXPLICATION", "AVERTISSEMENT", "BLAME", "MISE_EN_DEMEURE", "MISE_A_PIED", "LICENCIEMENT"]
 export const STATUTS_EMPLOYE = ["ACTIF", "INACTIF", "SUSPENDU"]
+
+export const ROLES_ORG = ["EMPLOYE", "RESPONSABLE", "RH", "ADMIN"] as const
+export const ROLES_ORG_LABELS: Record<string, string> = {
+  EMPLOYE:     "Employé",
+  RESPONSABLE: "Responsable d'équipe",
+  RH:          "Ressources Humaines",
+  ADMIN:       "Administrateur",
+}
 
 export const MOIS = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",

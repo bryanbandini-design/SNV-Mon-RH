@@ -5,6 +5,7 @@ import {
   Users, Calendar, AlertTriangle, DollarSign, Clock,
   FlaskConical, Plus, ArrowRight, TrendingUp, UserCheck,
   CheckCircle, AlertCircle, ChevronRight, FileWarning, Timer,
+  Scale, Building2,
 } from "lucide-react"
 import { formatCurrency, formatDate, MOIS } from "@/lib/utils"
 import { DashboardCharts } from "@/components/dashboard/charts"
@@ -15,6 +16,11 @@ export default async function DashboardPage() {
   const now = new Date()
   const currentMonth = now.getMonth() + 1
   const currentYear  = now.getFullYear()
+
+  // Cycle de paie : on paie N-1 en N. Le mois courant n'est jamais encore traité —
+  // le KPI affiche toujours le mois précédent (le dernier mois réellement payé).
+  const pMois  = currentMonth === 1 ? 12 : currentMonth - 1
+  const pAnnee = currentMonth === 1 ? currentYear - 1 : currentYear
   const prenom = session?.user?.name?.split(" ")[0] ?? "Admin"
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
@@ -36,12 +42,13 @@ export default async function DashboardPage() {
     cddExpirant,
     pointagesManuelsCount,
     pointagesManuelsDetail,
+    declarationsOuvertes,
   ] = await Promise.all([
     prisma.employe.count({ where: { statut: "ACTIF" } }),
     prisma.conge.count({ where: { statut: "EN_ATTENTE" } }),
     prisma.dossierDisciplinaire.count({ where: { statut: { in: ["INITIE","EN_ATTENTE_REP","DOCUMENT_PRET","ENVOYE_EMPLOYE","REPONSE_RECUE"] } } }),
     prisma.historiqueSalaire.aggregate({
-      where: { mois: currentMonth, annee: currentYear },
+      where: { mois: pMois, annee: pAnnee, employe: { typeContrat: { not: "PRESTATAIRE" } } },
       _sum: { netAPayer: true },
     }),
     prisma.presence.count({ where: { date: { gte: todayStart, lt: todayEnd } } }),
@@ -90,11 +97,34 @@ export default async function DashboardPage() {
       orderBy: { date: "asc" },
       include: { employe: { select: { prenom: true, nom: true } } },
     }),
+    prisma.declarationPeriode.findMany({
+      where: { statut: { not: "SOLDEE" } },
+      select: {
+        id: true, mois: true, annee: true, statut: true,
+        totalCNPS: true, totalImpots: true, totalAVerser: true,
+        datePaiementCNPS: true, datePaiementImpots: true,
+      },
+      orderBy: [{ annee: "desc" }, { mois: "desc" }],
+    }),
   ])
 
-  // Fiches de salaire manquantes ce mois
-  const fichesCeMois = await prisma.historiqueSalaire.count({ where: { mois: currentMonth, annee: currentYear } })
-  const ficheManquantes = totalEmployes - fichesCeMois
+  // Fiches de salaire manquantes sur la période de traitement (salariés uniquement)
+  const fichesPeriode = await prisma.historiqueSalaire.count({
+    where: { mois: pMois, annee: pAnnee, employe: { typeContrat: { not: "PRESTATAIRE" } } },
+  })
+  const ficheManquantes = totalEmployes - fichesPeriode
+
+  // Déclarations sociales & fiscales
+  const declEnRetard = declarationsOuvertes.filter(d => {
+    const limite = new Date(d.annee, d.mois, 15)
+    return now > limite && d.statut !== "SOLDEE"
+  })
+  const declCNPSAPayer = declarationsOuvertes
+    .filter(d => !d.datePaiementCNPS)
+    .reduce((s, d) => s + d.totalCNPS, 0)
+  const declImpotsAPayer = declarationsOuvertes
+    .filter(d => !d.datePaiementImpots)
+    .reduce((s, d) => s + d.totalImpots, 0)
 
   // Masse salariale 6 mois
   const moisGraphique: { mois: string; montant: number }[] = []
@@ -134,7 +164,7 @@ export default async function DashboardPage() {
   // Total d'actions à traiter
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const role = (session?.user as any)?.role as string | undefined
-  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length + (pointagesManuelsCount > 0 ? 1 : 0)
+  const totalActions = congesEnAttente + dossiersDelaiDepasse.length + (ficheManquantes > 0 ? 1 : 0) + essaisExpiration + cddExpirant.length + (pointagesManuelsCount > 0 ? 1 : 0) + (declEnRetard.length > 0 ? 1 : 0)
 
   const kpis = [
     { label: "Employés actifs",    value: totalActifs.toString(),
@@ -143,8 +173,8 @@ export default async function DashboardPage() {
       sub: congesEnAttente === 0 ? "Tout est validé" : "à valider", icon: Calendar, accent: "#f59e0b", bg: "#fffbeb", href: "/conges", alert: congesEnAttente > 0 },
     { label: "Dossiers disciplin.", value: disciplinairesEnCours.toString(),
       sub: disciplinairesEnCours === 0 ? "Aucun en cours" : "en cours", icon: AlertTriangle, accent: "#ef4444", bg: "#fef2f2", href: "/disciplinaire", alert: disciplinairesEnCours > 0 },
-    { label: `Masse sal. ${MOIS[currentMonth - 1]}`, value: netMois > 0 ? formatCurrency(netMois) : "—",
-      sub: netMois === 0 ? "Aucune fiche ce mois" : `${currentYear}`, icon: DollarSign, accent: "#10b981", bg: "#ecfdf5", href: "/salaires" },
+    { label: `Masse sal. ${MOIS[pMois - 1]}`, value: netMois > 0 ? formatCurrency(netMois) : "—",
+      sub: netMois === 0 ? `Aucune fiche — ${MOIS[pMois - 1]} ${pAnnee}` : `${pAnnee}`, icon: DollarSign, accent: "#10b981", bg: "#ecfdf5", href: "/salaires" },
     { label: "Pointages aujourd'hui", value: presencesAujourdhui.toString(),
       sub: `sur ${totalActifs} actifs`, icon: Clock, accent: "#8b5cf6", bg: "#f5f3ff", href: "/horaires" },
     { label: "Essais expirant", value: essaisExpiration.toString(),
@@ -373,6 +403,40 @@ export default async function DashboardPage() {
               </div>
             )}
 
+            {/* Déclarations en arriéré */}
+            {declEnRetard.length > 0 && (
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Scale className="h-4 w-4" style={{ color: "#7c3aed" }} />
+                    <span className="text-xs font-semibold text-slate-700">Cotisations en retard</span>
+                  </div>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "#fef2f2", color: "#dc2626" }}>
+                    {declEnRetard.length}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {declEnRetard.slice(0, 3).map(d => (
+                    <div key={d.id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-700 font-medium">{MOIS[d.mois - 1]} {d.annee}</span>
+                      <span className="text-[10px] font-bold" style={{ color: "#dc2626" }}>
+                        {Math.round(d.totalAVerser).toLocaleString("fr-FR")} F
+                      </span>
+                    </div>
+                  ))}
+                  {declEnRetard.length > 3 && (
+                    <p className="text-[10px] text-slate-400">+ {declEnRetard.length - 3} autre(s)…</p>
+                  )}
+                </div>
+                <Link href="/declarations"
+                  className="mt-3 flex items-center gap-1 text-xs font-semibold"
+                  style={{ color: "#7c3aed" }}>
+                  Régulariser <ChevronRight className="h-3 w-3" />
+                </Link>
+              </div>
+            )}
+
             {/* CDD expirant dans 30 jours */}
             {cddExpirant.length > 0 && (
               <div className="p-4">
@@ -431,27 +495,27 @@ export default async function DashboardPage() {
       )}
 
       {/* ── KPIs ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         {kpis.map((k, i) => (
           <Link
             key={k.label}
             href={k.href}
-            className={`block rounded-xl border bg-white group card-hover anim-fade-up anim-delay-${i + 1}`}
+            className={`block rounded-xl border bg-white group card-hover anim-fade-up anim-delay-${Math.min(i + 1, 6)}`}
             style={{ borderColor: k.alert ? k.accent + "60" : "#e2e8f0", borderTopWidth: "3px", borderTopColor: k.accent }}
           >
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-3">
+            <div className="p-3 sm:p-4">
+              <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{k.label}</p>
-                  <p className="text-3xl font-black text-slate-900 leading-none">{k.value}</p>
-                  <p className="text-xs text-slate-400 mt-1.5">{k.sub}</p>
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 leading-tight">{k.label}</p>
+                  <p className="text-xl sm:text-2xl font-black text-slate-900 leading-none truncate">{k.value}</p>
+                  <p className="text-[10px] text-slate-400 mt-1 truncate">{k.sub}</p>
                 </div>
-                <div className="rounded-xl p-2.5 flex-shrink-0" style={{ background: k.bg }}>
-                  <k.icon className="h-5 w-5" style={{ color: k.accent }} />
+                <div className="rounded-lg p-2 flex-shrink-0" style={{ background: k.bg }}>
+                  <k.icon className="h-4 w-4" style={{ color: k.accent }} />
                 </div>
               </div>
-              <div className="flex items-center gap-1 mt-3 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: k.accent }}>
-                Voir le détail <ArrowRight className="h-3 w-3" />
+              <div className="hidden sm:flex items-center gap-1 mt-2 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: k.accent }}>
+                Voir <ArrowRight className="h-2.5 w-2.5" />
               </div>
             </div>
           </Link>
@@ -465,11 +529,85 @@ export default async function DashboardPage() {
         contrats={contrats}
       />
 
+      {/* ── Cotisations sociales & fiscales ─────────── */}
+      {(role === "ADMIN" || role === "RH") && (declCNPSAPayer + declImpotsAPayer > 0 || declarationsOuvertes.length > 0) && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden anim-fade-up">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Scale className="h-4 w-4 text-violet-500" />
+              <span className="font-semibold text-slate-900 text-sm">Cotisations sociales &amp; fiscales</span>
+              {declEnRetard.length > 0 && (
+                <span className="h-5 min-w-[20px] px-1.5 rounded-full text-[11px] font-bold text-white flex items-center justify-center"
+                  style={{ background: "#ef4444" }}>
+                  {declEnRetard.length}
+                </span>
+              )}
+            </div>
+            <Link href="/declarations" className="text-xs font-semibold hover:underline" style={{ color: "#7c3aed" }}>
+              Gérer les déclarations →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+            {[
+              {
+                label: "CNPS à régler",
+                value: declCNPSAPayer > 0 ? `${Math.round(declCNPSAPayer).toLocaleString("fr-FR")} F` : "À jour",
+                sub: "salarié + patronal",
+                icon: Building2,
+                color: declCNPSAPayer > 0 ? "#1a3461" : "#059669",
+                bg: declCNPSAPayer > 0 ? "#eef2ff" : "#ecfdf5",
+                ok: declCNPSAPayer === 0,
+              },
+              {
+                label: "Impôts à régler",
+                value: declImpotsAPayer > 0 ? `${Math.round(declImpotsAPayer).toLocaleString("fr-FR")} F` : "À jour",
+                sub: "IRPP + CAC + RAV",
+                icon: Scale,
+                color: declImpotsAPayer > 0 ? "#1e5bb8" : "#059669",
+                bg: declImpotsAPayer > 0 ? "#eff6ff" : "#ecfdf5",
+                ok: declImpotsAPayer === 0,
+              },
+              {
+                label: "Total à verser",
+                value: (declCNPSAPayer + declImpotsAPayer) > 0
+                  ? `${Math.round(declCNPSAPayer + declImpotsAPayer).toLocaleString("fr-FR")} F`
+                  : "Tout réglé",
+                sub: "cotisations restantes",
+                icon: DollarSign,
+                color: (declCNPSAPayer + declImpotsAPayer) > 0 ? "#7c3aed" : "#059669",
+                bg: (declCNPSAPayer + declImpotsAPayer) > 0 ? "#f5f3ff" : "#ecfdf5",
+                ok: (declCNPSAPayer + declImpotsAPayer) === 0,
+              },
+              {
+                label: "En arriéré",
+                value: declEnRetard.length > 0 ? `${declEnRetard.length} période(s)` : "Aucun",
+                sub: declEnRetard.length > 0 ? "délai légal dépassé" : "dans les délais",
+                icon: AlertCircle,
+                color: declEnRetard.length > 0 ? "#dc2626" : "#059669",
+                bg: declEnRetard.length > 0 ? "#fef2f2" : "#ecfdf5",
+                ok: declEnRetard.length === 0,
+              },
+            ].map(c => (
+              <div key={c.label} className="flex items-center gap-3 p-4">
+                <div className="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.bg }}>
+                  <c.icon className="h-4 w-4" style={{ color: c.color }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">{c.label}</p>
+                  <p className="text-sm font-black truncate" style={{ color: c.ok ? "#059669" : c.color }}>{c.value}</p>
+                  <p className="text-[10px] text-slate-400">{c.sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Bas de page ─────────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-6 gap-5">
 
         {/* Équipe */}
-        <div className="col-span-1 xl:col-span-3 rounded-xl border border-slate-200 bg-white overflow-hidden anim-fade-up">
+        <div className="col-span-1 xl:col-span-4 rounded-xl border border-slate-200 bg-white overflow-hidden anim-fade-up">
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <UserCheck className="h-4 w-4" style={{ color: "#3b82f6" }} />
@@ -515,7 +653,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Colonne droite */}
-        <div className="col-span-1 xl:col-span-2 flex flex-col gap-4">
+        <div className="col-span-1 xl:col-span-2 flex flex-col gap-5">
 
           {/* Actions rapides */}
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden anim-fade-up anim-delay-2">

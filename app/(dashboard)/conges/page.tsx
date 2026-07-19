@@ -334,27 +334,27 @@ export default function CongesPage() {
       </div>
 
       {/* Filtres */}
-      <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
-        <div className="col-span-full flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
           <Filter className="h-3.5 w-3.5" />
           Filtrer :
         </div>
         <Select value={filtreEmp} onValueChange={setFiltreEmp}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-44"><SelectValue placeholder="Employé" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[160px]"><SelectValue placeholder="Employé" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les employés</SelectItem>
             {employes.map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreType} onValueChange={setFiltreType}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-36"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[130px]"><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les types</SelectItem>
             {TYPES_CONGE.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreStatut} onValueChange={setFiltreStatut}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-36"><SelectValue placeholder="Statut" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[130px]"><SelectValue placeholder="Statut" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les statuts</SelectItem>
             <SelectItem value="EN_ATTENTE">En attente</SelectItem>
@@ -362,15 +362,13 @@ export default function CongesPage() {
             <SelectItem value="REFUSE">Refusé</SelectItem>
           </SelectContent>
         </Select>
-        <div className="col-span-full flex items-center justify-between">
-          {hasFiltre && (
-            <button onClick={() => { setFiltreEmp("TOUS"); setFiltreType("TOUS"); setFiltreStatut("TOUS") }}
-              className="text-xs text-slate-400 hover:text-slate-700 underline">
-              Réinitialiser
-            </button>
-          )}
-          <span className="ml-auto text-xs text-slate-400">{filtered.length} résultat(s)</span>
-        </div>
+        {hasFiltre && (
+          <button onClick={() => { setFiltreEmp("TOUS"); setFiltreType("TOUS"); setFiltreStatut("TOUS") }}
+            className="text-xs text-slate-400 hover:text-slate-700 underline">
+            Réinitialiser
+          </button>
+        )}
+        <span className="ml-auto text-xs text-slate-400">{filtered.length} résultat(s)</span>
       </div>
 
       {/* Modal commentaire individuel */}

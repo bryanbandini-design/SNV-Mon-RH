@@ -2,10 +2,14 @@ import { prisma } from "@/lib/prisma"
 import { CAMEROUN } from "@/lib/cameroun-salaire"
 
 export async function syncDeclarationPeriode(mois: number, annee: number) {
-  const salaires = await prisma.historiqueSalaire.findMany({
-    where: { mois, annee, statut: "PAYE" },
+  const tous = await prisma.historiqueSalaire.findMany({
+    where:   { mois, annee, statut: "PAYE" },
+    include: { employe: { select: { typeContrat: true } } },
   })
-  if (salaires.length === 0) return
+
+  // Les prestataires de services ne sont pas soumis au régime salarié (CNPS / IRPP)
+  const salaires = tous.filter(s => s.employe.typeContrat !== "PRESTATAIRE")
+  if (tous.length === 0) return  // aucun salaire payé du tout pour cette période
 
   const totalBrutCNPS     = salaires.reduce((s, r) => s + Math.min(r.brutImposable, CAMEROUN.CNPS_PLAFOND_MENSUEL), 0)
   const totalCNPSSalarie  = salaires.reduce((s, r) => s + r.cnpsSalarie, 0)
@@ -16,7 +20,7 @@ export async function syncDeclarationPeriode(mois: number, annee: number) {
   const totalRAV          = salaires.reduce((s, r) => s + r.rav, 0)
   const totalImpots       = totalIRPP + totalCAC + totalRAV
   const totalAVerser      = totalCNPS + totalImpots
-  const nbSalaries        = salaires.length
+  const nbSalaries        = salaires.length  // exclut les prestataires
 
   await prisma.declarationPeriode.upsert({
     where:  { mois_annee: { mois, annee } },

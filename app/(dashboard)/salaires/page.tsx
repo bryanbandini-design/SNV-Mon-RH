@@ -23,7 +23,7 @@ function downloadCSV(rows: (string | number)[][], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-type Employe = { id: string; prenom: string; nom: string; matricule: string; poste: string; salaireBase: number; statut: string }
+type Employe = { id: string; prenom: string; nom: string; matricule: string; poste: string; salaireBase: number; statut: string; typeContrat: string }
 type Salaire = {
   id: string; mois: number; annee: number; salaireBase: number
   primes: number; retenues: number; netAPayer: number
@@ -32,7 +32,7 @@ type Salaire = {
   joursAbsence: number; retenueAbsence: number
   minutesRetardTotal: number; retenueRetard: number
   statut: string; datePaiement: string | null; notes: string | null
-  employe: { id: string; prenom: string; nom: string; matricule: string; poste: string }
+  employe: { id: string; prenom: string; nom: string; matricule: string; poste: string; typeContrat: string }
 }
 type Avance = {
   id: string; montant: number; date: string; motif: string | null; statut: string
@@ -47,6 +47,20 @@ type Retenue = {
 const YEARS = Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - 4 + i)
 
 function initiales(e: { prenom: string; nom: string }) { return e.prenom[0] + e.nom[0] }
+
+// Cycle de paie : on paie le mois N-1 en mois N, deadline le 10
+// Du 1er au 10 du mois courant → on traite le mois précédent
+// Après le 10 → on prépare le mois courant
+function getPeriodeTraitement(): { mois: number; annee: number } {
+  const now   = new Date()
+  const day   = now.getDate()
+  const month = now.getMonth() + 1
+  const year  = now.getFullYear()
+  if (day <= 10) {
+    return month === 1 ? { mois: 12, annee: year - 1 } : { mois: month - 1, annee: year }
+  }
+  return { mois: month, annee: year }
+}
 
 const emptyForm = (currentMonth: number, currentYear: number) => ({
   employeId: "", mois: String(currentMonth), annee: String(currentYear),
@@ -64,17 +78,16 @@ export default function SalairesPage() {
   const [retenueValidating, setRetenueValidating] = useState<string | null>(null)
   const [showForm, setShowForm]       = useState(false)
   const [showAvanceForm, setShowAvanceForm] = useState(false)
-  const [rattrapageMois,  setRattrapageMois]  = useState(() => String(new Date().getMonth() + 1))
-  const [rattrapageAnnee, setRattrapageAnnee] = useState(() => String(new Date().getFullYear()))
+  const [rattrapageMois,  setRattrapageMois]  = useState(() => String(getPeriodeTraitement().mois))
+  const [rattrapageAnnee, setRattrapageAnnee] = useState(() => String(getPeriodeTraitement().annee))
   const [avanceSaving, setAvanceSaving] = useState(false)
   const [avanceForm, setAvanceForm]   = useState(emptyAvanceForm())
   const [activeTab, setActiveTab]     = useState<"fiches" | "avances" | "retenues">("fiches")
   const [loading, setLoading]   = useState(false)
 
-  const currentYear  = new Date().getFullYear()
-  const currentMonth = new Date().getMonth() + 1
+  const { mois: defaultMois, annee: defaultAnnee } = getPeriodeTraitement()
 
-  const [form, setForm] = useState(emptyForm(currentMonth, currentYear))
+  const [form, setForm] = useState(emptyForm(defaultMois, defaultAnnee))
   const [editId, setEditId] = useState<string | null>(null)
 
   // Filtres
@@ -82,6 +95,7 @@ export default function SalairesPage() {
   const [filtreAnnee,  setFiltreAnnee]  = useState("TOUS")
   const [filtreEmp,    setFiltreEmp]    = useState("TOUS")
   const [filtreStatut, setFiltreStatut] = useState("TOUS")
+  const [filtreType,   setFiltreType]   = useState("TOUS") // TOUS | SALARIE | PRESTATAIRE
 
   useEffect(() => {
     Promise.all([
@@ -163,7 +177,8 @@ export default function SalairesPage() {
   function cancelForm() {
     setShowForm(false)
     setEditId(null)
-    setForm(emptyForm(currentMonth, currentYear))
+    const { mois, annee } = getPeriodeTraitement()
+    setForm(emptyForm(mois, annee))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -179,7 +194,7 @@ export default function SalairesPage() {
     if (res.ok) {
       const n = await res.json()
       const emp = employes.find(x => x.id === form.employeId)!
-      const enriched = { ...n, employe: { id: emp.id, prenom: emp.prenom, nom: emp.nom, matricule: emp.matricule, poste: emp.poste } }
+      const enriched = { ...n, employe: { id: emp.id, prenom: emp.prenom, nom: emp.nom, matricule: emp.matricule, poste: emp.poste, typeContrat: emp.typeContrat } }
       if (editId) {
         setSalaires(prev => prev.map(s => s.id === editId ? enriched : s))
         toast.success("Fiche modifiée")
@@ -262,11 +277,29 @@ export default function SalairesPage() {
     if (filtreAnnee  !== "TOUS" && String(s.annee)       !== filtreAnnee)  return false
     if (filtreEmp    !== "TOUS" && s.employe.id          !== filtreEmp)    return false
     if (filtreStatut !== "TOUS" && s.statut              !== filtreStatut) return false
+    if (filtreType === "PRESTATAIRE" && s.employe.typeContrat !== "PRESTATAIRE") return false
+    if (filtreType === "SALARIE"     && s.employe.typeContrat === "PRESTATAIRE") return false
     return true
-  }), [salaires, filtreMois, filtreAnnee, filtreEmp, filtreStatut])
+  }), [salaires, filtreMois, filtreAnnee, filtreEmp, filtreStatut, filtreType])
 
-  const hasFiltre = filtreMois !== "TOUS" || filtreAnnee !== "TOUS" || filtreEmp !== "TOUS" || filtreStatut !== "TOUS"
+  const hasFiltre = filtreMois !== "TOUS" || filtreAnnee !== "TOUS" || filtreEmp !== "TOUS" || filtreStatut !== "TOUS" || filtreType !== "TOUS"
   const enAttente  = salaires.filter(s => s.statut === "EN_ATTENTE")
+
+  // ── Bandeau cycle de paie ──
+  const aujourdhui      = new Date()
+  const jourDuMois      = aujourdhui.getDate()
+  const { mois: pMois, annee: pAnnee } = getPeriodeTraitement()
+  const enFenetreTraitement = jourDuMois <= 10
+  const moisDeadline    = pMois === 12 ? 1 : pMois + 1
+  const anneeDeadline   = pMois === 12 ? pAnnee + 1 : pAnnee
+  const deadline        = new Date(anneeDeadline, moisDeadline - 1, 10)
+  const joursAvantDeadline = Math.ceil((deadline.getTime() - aujourdhui.getTime()) / 86400000)
+  const salairePeriode  = salaires.filter(s => s.mois === pMois && s.annee === pAnnee && s.employe.typeContrat !== "PRESTATAIRE")
+  const payesPeriode    = salairePeriode.filter(s => s.statut === "PAYE")
+  const attentesPeriode = salairePeriode.filter(s => s.statut === "EN_ATTENTE")
+  const sansFichePeriode = employes.filter(e => e.statut === "ACTIF" && e.typeContrat !== "PRESTATAIRE" && !salairePeriode.find(s => s.employe.id === e.id))
+  const enRetardPaiement = joursAvantDeadline < 0 && attentesPeriode.length > 0
+  const montrerBandeau   = enFenetreTraitement || attentesPeriode.length > 0 || sansFichePeriode.length > 0
 
   // Employés sans fiche pour la période de rattrapage sélectionnée
   const rMois  = parseInt(rattrapageMois)
@@ -274,7 +307,7 @@ export default function SalairesPage() {
   const idsAvecFichePeriode = new Set(
     salaires.filter(s => s.mois === rMois && s.annee === rAnnee).map(s => s.employe.id)
   )
-  const employesSansFiche = employes.filter(e => e.statut === "ACTIF" && !idsAvecFichePeriode.has(e.id))
+  const employesSansFiche = employes.filter(e => e.statut === "ACTIF" && e.typeContrat !== "PRESTATAIRE" && !idsAvecFichePeriode.has(e.id))
   const netPending = enAttente.reduce((a, s) => a + s.netAPayer, 0)
   const netPaye    = salaires.filter(s => s.statut === "PAYE").reduce((a, s) => a + s.netAPayer, 0)
   const netTotal   = salaires.reduce((a, s) => a + s.netAPayer, 0)
@@ -323,7 +356,7 @@ export default function SalairesPage() {
             Avance
           </button>
           <button
-            onClick={() => { setEditId(null); setForm(emptyForm(currentMonth, currentYear)); setShowForm(true); setActiveTab("fiches") }}
+            onClick={() => { setEditId(null); const p = getPeriodeTraitement(); setForm(emptyForm(p.mois, p.annee)); setShowForm(true); setActiveTab("fiches") }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
             style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
             <Plus className="h-4 w-4" />
@@ -428,6 +461,47 @@ export default function SalairesPage() {
         )}
       </div>
 
+      {/* ── Bandeau cycle de paie ── */}
+      {montrerBandeau && (
+        <div className={`rounded-xl border px-4 py-4 flex items-start gap-3 ${enRetardPaiement ? "border-red-200 bg-red-50" : "border-blue-200 bg-blue-50/60"}`}>
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${enRetardPaiement ? "bg-red-100" : "bg-blue-100"}`}>
+            <Clock className={`h-4 w-4 ${enRetardPaiement ? "text-red-600" : "text-blue-600"}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold ${enRetardPaiement ? "text-red-800" : "text-blue-800"}`}>
+              {enRetardPaiement
+                ? `Deadline dépassée — salaires de ${MOIS[pMois - 1]} ${pAnnee} impayés`
+                : `Période de traitement — salaires de ${MOIS[pMois - 1]} ${pAnnee}`}
+            </p>
+            <p className={`text-xs mt-0.5 ${enRetardPaiement ? "text-red-600" : "text-blue-600"}`}>
+              {enRetardPaiement
+                ? `Le délai légal du 10 ${MOIS[moisDeadline - 1]} est dépassé — ${attentesPeriode.length} fiche(s) non réglée(s)`
+                : joursAvantDeadline === 0
+                  ? `Deadline aujourd'hui (10 ${MOIS[moisDeadline - 1]}) — ${attentesPeriode.length} fiche(s) encore en attente`
+                  : joursAvantDeadline > 0
+                    ? `À régler avant le 10 ${MOIS[moisDeadline - 1]} ${anneeDeadline} (dans ${joursAvantDeadline} jour${joursAvantDeadline > 1 ? "s" : ""})`
+                    : "Période de préparation du prochain cycle"}
+            </p>
+            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs">
+              {payesPeriode.length > 0 && (
+                <span className="font-medium text-emerald-700">{payesPeriode.length} payé(s)</span>
+              )}
+              {attentesPeriode.length > 0 && (
+                <span className={`font-medium ${enRetardPaiement ? "text-red-700" : "text-amber-700"}`}>
+                  {attentesPeriode.length} en attente
+                </span>
+              )}
+              {sansFichePeriode.length > 0 && (
+                <span className="text-slate-500">{sansFichePeriode.length} sans fiche</span>
+              )}
+              {attentesPeriode.length === 0 && sansFichePeriode.length === 0 && salairePeriode.length > 0 && (
+                <span className="font-semibold text-emerald-700">✓ Tous les salaires réglés</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary cards */}
       {salaires.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -467,8 +541,22 @@ export default function SalairesPage() {
               <Label className="text-xs font-medium text-slate-600">Employé *</Label>
               <Select value={form.employeId} onValueChange={handleEmployeChange} disabled={!!editId}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner un employé" /></SelectTrigger>
-                <SelectContent>{employes.map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {employes.filter(e => e.typeContrat !== "PRESTATAIRE").length > 0 && (
+                    <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Salariés</div>
+                  )}
+                  {employes.filter(e => e.typeContrat !== "PRESTATAIRE").map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</SelectItem>)}
+                  {employes.filter(e => e.typeContrat === "PRESTATAIRE").length > 0 && (
+                    <div className="px-2 py-1 text-[10px] font-semibold text-orange-500 uppercase tracking-wide mt-1">Prestataires</div>
+                  )}
+                  {employes.filter(e => e.typeContrat === "PRESTATAIRE").map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom} — {e.poste}</SelectItem>)}
+                </SelectContent>
               </Select>
+              {employes.find(e => e.id === form.employeId)?.typeContrat === "PRESTATAIRE" && (
+                <p className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mt-1">
+                  Prestataire de service — ce paiement n&apos;apparaîtra pas dans les déclarations CNPS ni fiscales.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600">Mois *</Label>
@@ -793,42 +881,50 @@ export default function SalairesPage() {
 
       {activeTab === "fiches" && <>
       {/* Filtres */}
-      <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
-        <div className="col-span-2 flex items-center gap-1.5 text-xs text-slate-500 font-medium sm:w-auto">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
           <Filter className="h-3.5 w-3.5" />
           Filtrer :
         </div>
         <Select value={filtreAnnee} onValueChange={setFiltreAnnee}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-28"><SelectValue placeholder="Année" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[100px]"><SelectValue placeholder="Année" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Toutes</SelectItem>
             {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreMois} onValueChange={setFiltreMois}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-32"><SelectValue placeholder="Mois" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[120px]"><SelectValue placeholder="Mois" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les mois</SelectItem>
             {MOIS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreEmp} onValueChange={setFiltreEmp}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-44"><SelectValue placeholder="Employé" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[160px]"><SelectValue placeholder="Employé" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les employés</SelectItem>
             {employes.map(e => <SelectItem key={e.id} value={e.id}>{e.prenom} {e.nom}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtreStatut} onValueChange={setFiltreStatut}>
-          <SelectTrigger className="h-9 text-xs w-full sm:w-36"><SelectValue placeholder="Statut" /></SelectTrigger>
+          <SelectTrigger className="h-9 text-xs w-[130px]"><SelectValue placeholder="Statut" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TOUS">Tous les statuts</SelectItem>
             <SelectItem value="EN_ATTENTE">En attente</SelectItem>
             <SelectItem value="PAYE">Payé</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filtreType} onValueChange={setFiltreType}>
+          <SelectTrigger className="h-9 text-xs w-[140px]"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TOUS">Tous les types</SelectItem>
+            <SelectItem value="SALARIE">Salariés</SelectItem>
+            <SelectItem value="PRESTATAIRE">Prestataires</SelectItem>
+          </SelectContent>
+        </Select>
         {hasFiltre && (
-          <button onClick={() => { setFiltreMois("TOUS"); setFiltreAnnee("TOUS"); setFiltreEmp("TOUS"); setFiltreStatut("TOUS") }}
+          <button onClick={() => { setFiltreMois("TOUS"); setFiltreAnnee("TOUS"); setFiltreEmp("TOUS"); setFiltreStatut("TOUS"); setFiltreType("TOUS") }}
             className="text-xs text-slate-400 hover:text-slate-700 underline">
             Réinitialiser
           </button>
@@ -870,7 +966,12 @@ export default function SalairesPage() {
                           {initiales(s.employe)}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">{s.employe.prenom} {s.employe.nom}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{s.employe.prenom} {s.employe.nom}</p>
+                            {s.employe.typeContrat === "PRESTATAIRE" && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 flex-shrink-0">Prestataire</span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-400">{MOIS[s.mois - 1]} {s.annee}</p>
                         </div>
                       </div>
@@ -945,15 +1046,26 @@ export default function SalairesPage() {
                               {initiales(s.employe)}
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">{s.employe.prenom} {s.employe.nom}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-slate-900">{s.employe.prenom} {s.employe.nom}</p>
+                                {s.employe.typeContrat === "PRESTATAIRE" && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 flex-shrink-0">
+                                    Prestataire
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-xs text-slate-400">{s.employe.poste}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-slate-600 whitespace-nowrap">{MOIS[s.mois - 1]} {s.annee}</td>
                         <td className="px-4 py-4 text-sm text-right text-slate-600 tabular-nums">{brut.toLocaleString("fr-FR")}</td>
-                        <td className="px-4 py-4 text-sm text-right tabular-nums" style={{ color: "#f59e0b" }}>{(s.cnpsSalarie ?? 0).toLocaleString("fr-FR")}</td>
-                        <td className="px-4 py-4 text-sm text-right tabular-nums" style={{ color: "#ef4444" }}>{((s.irpp ?? 0) + (s.cac ?? 0)).toLocaleString("fr-FR")}</td>
+                        <td className="px-4 py-4 text-sm text-right tabular-nums" style={{ color: s.employe.typeContrat === "PRESTATAIRE" ? "#9ca3af" : "#f59e0b" }}>
+                          {s.employe.typeContrat === "PRESTATAIRE" ? "—" : (s.cnpsSalarie ?? 0).toLocaleString("fr-FR")}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-right tabular-nums" style={{ color: s.employe.typeContrat === "PRESTATAIRE" ? "#9ca3af" : "#ef4444" }}>
+                          {s.employe.typeContrat === "PRESTATAIRE" ? "—" : ((s.irpp ?? 0) + (s.cac ?? 0)).toLocaleString("fr-FR")}
+                        </td>
                         <td className="px-4 py-4 text-right">
                           <span className="text-base font-black text-slate-900">{formatCurrency(s.netAPayer)}</span>
                         </td>
