@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -188,6 +188,7 @@ export default function HorairesPage() {
   })
   const [savingManuel, setSavingManuel] = useState(false)
   const [editingManuelId, setEditingManuelId] = useState<string | null>(null)
+  const formManuelRef = useRef<HTMLDivElement>(null)
 
   // ── Composition équipes ──────────────────────────────────────────────────────
   const [equipesPeriode, setEquipesPeriode] = useState(() => {
@@ -1107,7 +1108,7 @@ export default function HorairesPage() {
           </div>
 
           {/* Formulaire de saisie / modification */}
-          <div className={`rounded-xl border bg-white overflow-hidden ${editingManuelId ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"}`}>
+          <div ref={formManuelRef} className={`rounded-xl border bg-white overflow-hidden ${editingManuelId ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"}`}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {editingManuelId ? <Pencil className="h-4 w-4 text-indigo-500" /> : <PenLine className="h-4 w-4 text-indigo-500" />}
@@ -1295,7 +1296,7 @@ export default function HorairesPage() {
                                   motifManuel:      s.motifManuel ?? "Rattrapage de données",
                                   notes:            s.notes ?? "",
                                 })
-                                window.scrollTo({ top: 0, behavior: "smooth" })
+                                setTimeout(() => formManuelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
                               }}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
                             >
