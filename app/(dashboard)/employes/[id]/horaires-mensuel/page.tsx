@@ -139,247 +139,214 @@ export default function HorairesMensuelPage() {
   async function genererPDF() {
     if (!employe || !stats) return
     setPrinting(true)
-    const { jsPDF } = await import("jspdf")
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-    const W = 210, M = 14
 
-    // Couleurs
-    const NAVY   = [26, 52, 97] as const
-    const ACCENT = [37, 99, 235] as const
-    const GREEN  = [5, 150, 105] as const
-    const AMBER  = [217, 119, 6] as const
-    const RED    = [220, 38, 38] as const
-    const SLATE  = [100, 116, 139] as const
+    const { jsPDF }  = await import("jspdf")
+    const autoTable  = (await import("jspdf-autotable")).default
+    const doc        = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const W = 210, H = 297, m = 14
+    const FOOT = 20  // hauteur pied de page
 
-    function hex2rgb(hex: string): [number, number, number] {
-      const n = parseInt(hex.replace("#", ""), 16)
-      return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-    }
+    // Palette SANOVIA (identique aux autres documents)
+    const NAVY  : [number,number,number] = [26,  52,  97]
+    const GREEN : [number,number,number] = [122, 179,  46]
+    const BLUE  : [number,number,number] = [30,  139, 192]
+    const SLATE : [number,number,number] = [71,   85, 105]
+    const GREY  : [number,number,number] = [100, 116, 139]
+    const AMBER : [number,number,number] = [217, 119,   6]
+    const RED   : [number,number,number] = [220,  38,  38]
+    const LGREEN: [number,number,number] = [5,   150, 105]
 
-    // ── Header ──
-    doc.setFillColor(...NAVY)
-    doc.rect(0, 0, W, 40, "F")
-    doc.setFillColor(122, 179, 46)
-    doc.rect(0, 0, 4, 40, "F")
-
-    doc.setTextColor(122, 179, 46)
-    doc.setFontSize(7.5)
-    doc.setFont("helvetica", "bold")
-    doc.text("SANOVIA HEALTH CARE", M, 10)
-
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(15)
-    doc.text("Rapport Horaire Mensuel", M, 20)
-
-    doc.setFontSize(9.5)
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(147, 197, 253)
-    doc.text(`${employe.prenom} ${employe.nom} — ${MOIS[mois - 1]} ${annee}`, M, 28)
-    doc.text(`Matricule : ${employe.matricule} | Poste : ${employe.poste}`, M, 34)
-
-    // Date d'impression
-    doc.setTextColor(147, 197, 253)
-    doc.setFontSize(7)
-    doc.text(`Imprimé le ${new Date().toLocaleDateString("fr-FR")}`, W - M, 10, { align: "right" })
-
-    // ── Score ponctualité ──
     const sc = stats.scorePonctualite
-    const scCol = hex2rgb(scoreColor(sc))
-    doc.setFillColor(248, 250, 252)
-    doc.roundedRect(M, 46, W - 2 * M, 22, 3, 3, "F")
-    doc.setFillColor(226, 232, 240)
-    doc.roundedRect(M, 46, W - 2 * M, 22, 3, 3, "S")
+    const scRgb: [number,number,number] = sc >= 5 ? GREEN : sc >= 4 ? BLUE : sc >= 3 ? AMBER : RED
 
-    doc.setTextColor(...NAVY)
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "bold")
-    doc.text("Score Ponctualité & Assiduité", M + 4, 54)
+    // ── Chargement logo ──────────────────────────────────────────────────────
+    let logoB64: string | null = null
+    try {
+      const blob = await fetch("/logo-sanovia.png").then(r => r.blob())
+      logoB64 = await new Promise<string>((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(r.result as string)
+        r.onerror = rej
+        r.readAsDataURL(blob)
+      })
+    } catch { /* logo indisponible */ }
 
-    doc.setFontSize(20)
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(...scCol)
-    doc.text(`${sc}/5`, M + 4, 63)
-
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(...scCol)
-    doc.text(scoreLabel(sc), M + 22, 63)
-
-    // Étoiles
-    const starX = W - M - 35
-    for (let i = 1; i <= 5; i++) {
-      doc.setFillColor(i <= sc ? 250 : 226, i <= sc ? 204 : 232, i <= sc ? 21 : 240)
-      doc.circle(starX + (i - 1) * 7, 57, 2.5, "F")
-      doc.setFontSize(6)
-      doc.setTextColor(i <= sc ? 92 : 148, i <= sc ? 64 : 163, i <= sc ? 0 : 184)
-      doc.text("★", starX + (i - 1) * 7 - 1.5, 58.2)
+    // ── Helper pied de page (appliqué sur toutes les pages à la fin) ─────────
+    function drawFooter(pageNum: number, total: number) {
+      doc.setFillColor(...NAVY)
+      doc.rect(0, H - FOOT, W, FOOT, "F")
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255)
+      doc.text("SANOVIA Health Care", W / 2, H - FOOT + 6, { align: "center" })
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(147, 197, 253)
+      doc.text(
+        "Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   Société à responsabilité limitée",
+        W / 2, H - FOOT + 11, { align: "center" }
+      )
+      doc.text(
+        "NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707",
+        W / 2, H - FOOT + 15.5, { align: "center" }
+      )
+      doc.setFontSize(7); doc.setTextColor(200, 220, 255)
+      doc.text(`Page ${pageNum} / ${total}`, W - m, H - FOOT + 11, { align: "right" })
     }
 
-    // ── KPI cards ──
-    let y = 74
-    const kpis = [
-      { label: "Jours attendus",    val: stats.joursAttendu.toString(),         col: ACCENT },
-      { label: "Jours présents",    val: stats.nbPresentsTotal.toString(),       col: GREEN  },
-      { label: "Absences",          val: stats.nbAbsent.toString(),             col: stats.nbAbsent > 0 ? RED : GREEN },
-      { label: "Retards",           val: stats.nbRetard.toString(),             col: stats.nbRetard > 0 ? AMBER : GREEN },
-      { label: "Taux présence",     val: `${stats.tauxPresence}%`,              col: stats.tauxPresence >= 90 ? GREEN : RED },
-      { label: "Cumul retards",     val: stats.totalMinRetard > 0 ? hm(stats.totalMinRetard) : "0", col: AMBER },
-      { label: "Heures travaillées",val: `${stats.totalHeures.toFixed(1)}h`,    col: ACCENT },
-      { label: "HS validées",       val: `${stats.totalHSValidees.toFixed(1)}h`, col: GREEN },
-    ]
+    // ── En-tête page 1 ───────────────────────────────────────────────────────
+    if (logoB64) {
+      doc.addImage(logoB64, "PNG", m, 7, 55, 13.4)
+    } else {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY)
+      doc.text("SANOVIA HEALTH CARE", m, 16)
+    }
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...GREY)
+    doc.text(`Imprimé le ${new Date().toLocaleDateString("fr-FR")}`, W - m, 10, { align: "right" })
+    doc.text("Document confidentiel", W - m, 15, { align: "right" })
 
-    const kW = (W - 2 * M - 6 * 4) / 4
+    // Ligne verte séparatrice (identique aux autres docs)
+    doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.line(0, 26, W, 26)
+
+    // ── Bloc titre ───────────────────────────────────────────────────────────
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...NAVY)
+    doc.text("RAPPORT HORAIRE MENSUEL", m, 34)
+
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GREY)
+    doc.text(`${employe.prenom} ${employe.nom}  —  ${MOIS[mois - 1]} ${annee}`, m, 41)
+
+    doc.setFontSize(8)
+    const infoLine = `Matricule : ${employe.matricule}  ·  Poste : ${employe.poste}${employe.departement ? `  ·  ${employe.departement}` : ""}`
+    doc.text(infoLine, m, 47)
+
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3); doc.line(m, 51, W - m, 51)
+
+    // ── Score ponctualité ────────────────────────────────────────────────────
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3)
+    doc.roundedRect(m, 55, W - 2 * m, 24, 3, 3, "FD")
+    doc.setFillColor(...scRgb); doc.roundedRect(m, 55, 3, 24, 1, 1, "F")
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...GREY)
+    doc.text("SCORE PONCTUALITÉ & ASSIDUITÉ", m + 7, 62)
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(24); doc.setTextColor(...scRgb)
+    doc.text(`${sc}`, m + 7, 75)
+    doc.setFontSize(13); doc.setTextColor(...GREY); doc.text("/5", m + 18, 75)
+    doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...scRgb)
+    doc.text(scoreLabel(sc), m + 26, 75)
+
+    // Étoiles (cercles colorés)
+    const starStartX = W - m - 52
+    for (let i = 1; i <= 5; i++) {
+      doc.setFillColor(i <= sc ? 251 : 226, i <= sc ? 191 : 232, i <= sc ? 36 : 240)
+      doc.circle(starStartX + (i - 1) * 11, 67, 3.5, "F")
+      doc.setFontSize(8); doc.setTextColor(i <= sc ? 120 : 180, i <= sc ? 80 : 180, i <= sc ? 0 : 200)
+      doc.text("★", starStartX + (i - 1) * 11 - 2.5, 68.6)
+    }
+
+    // ── KPI cards (2 × 4) ────────────────────────────────────────────────────
+    const kpiY = 84
+    const kpis: { label: string; val: string; col: [number,number,number] }[] = [
+      { label: "JOURS ATTENDUS",     val: stats.joursAttendu.toString(),          col: BLUE   },
+      { label: "JOURS PRÉSENTS",     val: stats.nbPresentsTotal.toString(),        col: LGREEN },
+      { label: "ABSENCES",           val: stats.nbAbsent.toString(),              col: stats.nbAbsent > 0 ? RED : LGREEN },
+      { label: "RETARDS",            val: stats.nbRetard.toString(),              col: stats.nbRetard > 0 ? AMBER : LGREEN },
+      { label: "TAUX PRÉSENCE",      val: `${stats.tauxPresence}%`,               col: stats.tauxPresence >= 90 ? LGREEN : RED },
+      { label: "CUMUL RETARDS",      val: stats.totalMinRetard > 0 ? hm(stats.totalMinRetard) : "—", col: AMBER },
+      { label: "HEURES TRAVAILLÉES", val: `${stats.totalHeures.toFixed(1)}h`,     col: BLUE   },
+      { label: "HS VALIDÉES",        val: `${stats.totalHSValidees.toFixed(1)}h`, col: LGREEN },
+    ]
+    const gap = 3.5
+    const kW  = (W - 2 * m - gap * 3) / 4
+    const kH  = 19
+
     kpis.forEach((k, i) => {
       const col = i % 4
       const row = Math.floor(i / 4)
-      const kx  = M + col * (kW + 4)
-      const ky  = y + row * 20
-      doc.setFillColor(248, 250, 252)
-      doc.roundedRect(kx, ky, kW, 16, 2, 2, "F")
-      doc.setDrawColor(226, 232, 240)
-      doc.roundedRect(kx, ky, kW, 16, 2, 2, "S")
-      doc.setFillColor(k.col[0], k.col[1], k.col[2])
-      doc.roundedRect(kx, ky, 2, 16, 1, 1, "F")
-      doc.setFontSize(13)
-      doc.setFont("helvetica", "bold")
-      doc.setTextColor(k.col[0], k.col[1], k.col[2])
-      doc.text(k.val, kx + kW / 2, ky + 8, { align: "center" })
-      doc.setFontSize(6)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(...SLATE)
-      doc.text(k.label.toUpperCase(), kx + kW / 2, ky + 13, { align: "center" })
+      const kx  = m + col * (kW + gap)
+      const ky  = kpiY + row * (kH + gap)
+      doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3)
+      doc.roundedRect(kx, ky, kW, kH, 2, 2, "FD")
+      doc.setFillColor(...k.col); doc.roundedRect(kx, ky, 2.5, kH, 1, 1, "F")
+      doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...k.col)
+      doc.text(k.val, kx + kW / 2, ky + 9, { align: "center" })
+      doc.setFont("helvetica", "normal"); doc.setFontSize(5.5); doc.setTextColor(...GREY)
+      doc.text(k.label, kx + kW / 2, ky + 15.5, { align: "center" })
     })
-    y += 44
 
-    // ── Tableau détaillé ──
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(...NAVY)
-    doc.text("Détail journalier", M, y)
-    y += 5
+    // ── Titre section tableau ─────────────────────────────────────────────────
+    const tableStartY = kpiY + 2 * (kH + gap) + 7
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...NAVY)
+    doc.text("Détail journalier", m, tableStartY - 3)
 
-    // Header tableau
-    const cols = [
-      { label: "Date",        w: 30 },
-      { label: "Statut",      w: 24 },
-      { label: "Arrivée",     w: 18 },
-      { label: "Départ",      w: 18 },
-      { label: "Heures",      w: 18 },
-      { label: "Retard",      w: 18 },
-      { label: "HS",          w: 18 },
-      { label: "Remarque",    w: 0  }, // remaining
-    ]
-    const remW = W - 2 * M - cols.slice(0, -1).reduce((s, c) => s + c.w, 0)
-    cols[cols.length - 1].w = remW
-
-    doc.setFillColor(...NAVY)
-    doc.rect(M, y, W - 2 * M, 6, "F")
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(6.5)
-    doc.setFont("helvetica", "bold")
-    let cx = M + 1
-    cols.forEach(c => {
-      doc.text(c.label, cx, y + 4)
-      cx += c.w
-    })
-    y += 6
-
-    // Lignes
+    // ── Tableau via autotable ─────────────────────────────────────────────────
     const allDays = buildCalendar(mois, annee, stats.presences)
-    const workDays = allDays.filter(c => c && !c.isWeekend && (!c.isFuture || c.presence !== null)) as { date: string; presence: PresenceDetail | null; isWeekend: boolean; isFuture: boolean }[]
-    let row = 0
-    for (const day of workDays) {
-      if (y > 270) {
-        doc.addPage()
-        y = 14
-      }
-      const bg = row % 2 === 0 ? [255, 255, 255] : [248, 250, 252]
-      doc.setFillColor(...(bg as [number, number, number]))
-      doc.rect(M, y, W - 2 * M, 5.5, "F")
+    const workDays = allDays.filter(
+      c => c && !c.isWeekend && (!c.isFuture || c.presence !== null)
+    ) as { date: string; presence: PresenceDetail | null; isWeekend: boolean; isFuture: boolean }[]
 
-      const p = day.presence
-      const statut = p ? p.statut : "ABSENT_ND"
-      const scfg = STATUT_CFG[statut]
-      const scol = hex2rgb(scfg?.color ?? "#64748b")
+    autoTable(doc, {
+      startY: tableStartY,
+      margin: { left: m, right: m, bottom: FOOT + 5 },
+      head: [["Date", "Statut", "Arrivée", "Départ", "Heures", "Retard", "HS", "Notes"]],
+      body: workDays.map(({ date, presence: p }) => {
+        const statut = p ? p.statut : "ABSENT_ND"
+        const cfg    = STATUT_CFG[statut]
+        const dn     = new Date(date + "T12:00:00")
+          .toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })
+        const noteTxt = [
+          p?.notes ? p.notes.slice(0, 30) : "",
+          p?.saisieManuelle ? "[M]" : "",
+        ].filter(Boolean).join(" ")
+        return [
+          dn,
+          cfg?.label ?? statut,
+          p?.heureArrivee ?? "—",
+          p?.heureDepart  ?? "—",
+          p?.heuresTravaillees != null ? `${p.heuresTravaillees.toFixed(1)}h` : "—",
+          (p?.minutesRetard ?? 0) > 0 ? hm(p!.minutesRetard) : "—",
+          (p?.heuresSupBrutes ?? 0) > 0 ? `+${p!.heuresSupBrutes.toFixed(1)}h` : "—",
+          noteTxt,
+        ]
+      }),
+      headStyles: {
+        fillColor: NAVY, textColor: [255, 255, 255],
+        fontStyle: "bold", fontSize: 8, cellPadding: 3,
+      },
+      bodyStyles: { fontSize: 8, textColor: SLATE, cellPadding: 2.5 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { cellWidth: 24 },
+        1: { cellWidth: 26 },
+        2: { cellWidth: 16, halign: "center" },
+        3: { cellWidth: 16, halign: "center" },
+        4: { cellWidth: 16, halign: "center" },
+        5: { cellWidth: 14, halign: "center" },
+        6: { cellWidth: 14, halign: "center" },
+        7: { cellWidth: "auto" },
+      },
+      didParseCell: (data) => {
+        if (data.section !== "body") return
+        const p = workDays[data.row.index]?.presence
+        const statut = p?.statut ?? "ABSENT_ND"
+        if (data.column.index === 1) {
+          if (statut === "PRESENT")
+            data.cell.styles.textColor = [5, 150, 105]
+          else if (statut === "RETARD")
+            data.cell.styles.textColor = [217, 119, 6]
+          else if (statut === "ABSENT" || statut === "ABSENT_ND")
+            data.cell.styles.textColor = [220, 38, 38]
+          else if (statut === "CONGE")
+            data.cell.styles.textColor = [124, 58, 237]
+        }
+        if (data.column.index === 5 && data.cell.raw !== "—")
+          data.cell.styles.textColor = [217, 119, 6]
+        if (data.column.index === 6 && data.cell.raw !== "—")
+          data.cell.styles.textColor = [5, 150, 105]
+      },
+    })
 
-      doc.setFontSize(6.5)
-      doc.setFont("helvetica", "normal")
-      let rx = M + 1
-
-      // Date
-      const d   = new Date(day.date + "T12:00:00")
-      const dn  = d.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })
-      doc.setTextColor(15, 23, 42)
-      doc.text(dn, rx, y + 3.8)
-      rx += cols[0].w
-
-      // Statut
-      doc.setFillColor(...hex2rgb(scfg?.bg ?? "#f8fafc"))
-      doc.roundedRect(rx, y + 0.5, 20, 4, 1, 1, "F")
-      doc.setTextColor(...scol)
-      doc.setFont("helvetica", "bold")
-      doc.text(scfg?.label ?? statut, rx + 1, y + 3.8)
-      rx += cols[1].w
-
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(15, 23, 42)
-      // Arrivée
-      doc.text(p?.heureArrivee ?? "—", rx, y + 3.8)
-      rx += cols[2].w
-      // Départ
-      doc.text(p?.heureDepart ?? "—", rx, y + 3.8)
-      rx += cols[3].w
-      // Heures
-      doc.text(p?.heuresTravaillees != null ? `${p.heuresTravaillees.toFixed(1)}h` : "—", rx, y + 3.8)
-      rx += cols[4].w
-      // Retard
-      if ((p?.minutesRetard ?? 0) > 0) {
-        doc.setTextColor(...AMBER)
-        doc.text(hm(p!.minutesRetard), rx, y + 3.8)
-        doc.setTextColor(15, 23, 42)
-      } else {
-        doc.text("—", rx, y + 3.8)
-      }
-      rx += cols[5].w
-      // HS
-      if ((p?.heuresSupBrutes ?? 0) > 0) {
-        const hscol = hex2rgb(HS_CFG[p!.statutHeuresSup]?.color ?? "#64748b")
-        doc.setTextColor(...hscol)
-        doc.text(`+${p!.heuresSupBrutes.toFixed(1)}h`, rx, y + 3.8)
-        doc.setTextColor(15, 23, 42)
-      } else {
-        doc.text("—", rx, y + 3.8)
-      }
-      rx += cols[6].w
-      // Notes
-      if (p?.notes) {
-        doc.setTextColor(...SLATE)
-        doc.setFontSize(5.5)
-        doc.text(p.notes.slice(0, 40), rx, y + 3.8)
-      }
-      if (p?.saisieManuelle) {
-        doc.setFontSize(5)
-        doc.setTextColor(...SLATE)
-        doc.text("[M]", rx + remW - 6, y + 3.8)
-      }
-
-      doc.setDrawColor(226, 232, 240)
-      doc.line(M, y + 5.5, W - M, y + 5.5)
-      y += 5.5
-      row++
-    }
-
-    // ── Pied de page ──
-    const pageCount = doc.getNumberOfPages()
-    for (let i = 1; i <= pageCount; i++) {
+    // ── Pied de page sur toutes les pages ─────────────────────────────────────
+    const totalPages = doc.getNumberOfPages()
+    for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)
-      doc.setFillColor(...NAVY)
-      doc.rect(0, 285, W, 12, "F")
-      doc.setFontSize(6.5)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(147, 197, 253)
-      doc.text("SANOVIA Health Care — Document confidentiel", M, 291)
-      doc.text(`Page ${i}/${pageCount}`, W - M, 291, { align: "right" })
+      drawFooter(i, totalPages)
     }
 
     doc.save(`Rapport_Horaire_${employe.nom}_${MOIS[mois - 1]}_${annee}.pdf`)
