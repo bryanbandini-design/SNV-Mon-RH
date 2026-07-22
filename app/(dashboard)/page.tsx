@@ -148,24 +148,66 @@ export default async function DashboardPage() {
     ABSENT:  presencesSemaine.find(p => p.statut === "ABSENT")?._count.statut ?? 0,
   }
 
-  // Taux d'absentéisme réel :
-  // Les absences ne sont pas toutes saisies explicitement — on les déduit :
-  // attendu = employés actifs × jours ouvrés écoulés cette semaine (lun→ven)
-  // absents  = attendu − pointages effectifs (PRESENT + RETARD) distincts par (employeId, date)
-  const jourSemaine = now.getDay() // 0=dim, 1=lun … 6=sam
+  // Taux d'absentéisme réel
+  // Règle : tout employé sans aucune saisie (auto ou manuelle) pour un jour ouvré = absent
+  // Exceptions :
+  //   - CONGE / JOUR_OFF enregistrés → réduit le dénominateur (pas une absence)
+  //   - Congés approuvés sans saisie → déduits du dénominateur via la table Conge
+  const jourSemaine = now.getDay() // 0=dim, 1=lun…6=sam
   const joursOuvresEcoules = jourSemaine === 0 ? 5 : Math.min(jourSemaine, 5)
   const totalAttendu = totalActifs * joursOuvresEcoules
 
-  const pointagesEffectifs = await prisma.presence.groupBy({
-    by: ["employeId", "date"],
-    where: { date: { gte: lundi }, statut: { in: ["PRESENT", "RETARD"] } },
+  // Toutes les saisies (auto + manuelles) de la semaine, regroupées par (employé, jour)
+  const saisiesSemaine = await prisma.presence.groupBy({
+    by: ["employeId", "date", "statut"],
+    where: { date: { gte: lundi } },
   })
-  const nbPointagesEffectifs = pointagesEffectifs.length
-  const nbAbsencesDeduites   = Math.max(0, totalAttendu - nbPointagesEffectifs)
 
-  const tauxAbsenteisme = totalAttendu > 0
-    ? Math.round((nbAbsencesDeduites / totalAttendu) * 100)
-    : 0
+  // Couverts = saisie avec statut PRESENT, RETARD ou CONGE (présent ou en congé saisi manuellement)
+  const nbCouverts = new Set(
+    saisiesSemaine
+      .filter(p => ["PRESENT", "RETARD", "CONGE"].includes(p.statut))
+      .map(p => `${p.employeId}_${new Date(p.date).toISOString().slice(0, 10)}`)
+  ).size
+
+  // Jours off saisis = l'employé n'était pas attendu ce jour → réduit le dénominateur
+  const nbJoursOff = new Set(
+    saisiesSemaine
+      .filter(p => p.statut === "JOUR_OFF")
+      .map(p => `${p.employeId}_${new Date(p.date).toISOString().slice(0, 10)}`)
+  ).size
+
+  // Congés approuvés (sans saisie associée) → déduire du dénominateur
+  const congesActifsSemaine = await prisma.conge.findMany({
+    where: {
+      statut: "APPROUVE",
+      dateDebut: { lte: now },
+      dateFin:   { gte: lundi },
+    },
+    select: { employeId: true, dateDebut: true, dateFin: true },
+  })
+  // Compter les jours de congé dans la fenêtre lundi→aujourd'hui (jours ouvrés seulement)
+  let joursCongeNonSaisis = 0
+  const covertsIds = new Set(
+    saisiesSemaine.map(p => `${p.employeId}_${new Date(p.date).toISOString().slice(0, 10)}`)
+  )
+  for (const c of congesActifsSemaine) {
+    const debut = new Date(Math.max(new Date(c.dateDebut).getTime(), lundi.getTime()))
+    const fin   = new Date(Math.min(new Date(c.dateFin).getTime(), now.getTime()))
+    const cur   = new Date(debut)
+    while (cur <= fin) {
+      const dow = cur.getDay()
+      if (dow >= 1 && dow <= 5) { // lundi→vendredi
+        const key = `${c.employeId}_${cur.toISOString().slice(0, 10)}`
+        if (!covertsIds.has(key)) joursCongeNonSaisis++ // pas déjà compté via saisie
+      }
+      cur.setDate(cur.getDate() + 1)
+    }
+  }
+
+  const denominateur      = Math.max(1, totalAttendu - nbJoursOff - joursCongeNonSaisis)
+  const nbAbsencesDeduites = Math.max(0, denominateur - nbCouverts)
+  const tauxAbsenteisme   = Math.round((nbAbsencesDeduites / denominateur) * 100)
 
   const contratsRaw = await prisma.employe.groupBy({
     by: ["typeContrat"], where: { statut: "ACTIF" }, _count: { typeContrat: true },
