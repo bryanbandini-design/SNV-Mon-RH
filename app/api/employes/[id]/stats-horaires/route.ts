@@ -14,122 +14,141 @@ export async function GET(
   const mois  = parseInt(searchParams.get("mois")  ?? String(new Date().getMonth() + 1))
   const annee = parseInt(searchParams.get("annee") ?? String(new Date().getFullYear()))
 
-  const debut = new Date(annee, mois - 1, 1, 0, 0, 0)
-  const fin   = new Date(annee, mois, 0, 23, 59, 59)
+  // Dates en UTC pur — évite le décalage timezone côté serveur (ex: France UTC+2)
+  const debut = new Date(Date.UTC(annee, mois - 1, 1))
+  const fin   = new Date(Date.UTC(annee, mois, 0, 23, 59, 59, 999))
 
+  // "Aujourd'hui" selon la date locale de la machine (ex: 22 juillet en France)
+  // On reconstruit en UTC pour rester cohérent avec les dates Prisma
+  const now = new Date()
+  const todayEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
+  const finEffective = new Date(Math.min(fin.getTime(), todayEnd.getTime()))
+
+  // Présences jusqu'au jour J uniquement
   const presences = await prisma.presence.findMany({
-    where: { employeId: id, date: { gte: debut, lte: fin } },
+    where: { employeId: id, date: { gte: debut, lte: finEffective } },
     orderBy: { date: "asc" },
   })
 
-  // Jours ouvrés du mois (lun–ven)
-  let joursOuvres = 0
-  const cur = new Date(debut)
-  while (cur <= fin) {
-    const dow = cur.getDay()
-    if (dow >= 1 && dow <= 5) joursOuvres++
-    cur.setDate(cur.getDate() + 1)
-  }
-
-  // Congés approuvés sur ce mois → réduisent les jours ouvrés attendus
+  // Congés approuvés chevauchant la fenêtre effective
   const congesMois = await prisma.conge.findMany({
     where: {
       employeId: id,
       statut: "APPROUVE",
-      dateDebut: { lte: fin },
+      dateDebut: { lte: finEffective },
       dateFin:   { gte: debut },
     },
   })
-  let joursConge = 0
+
+  // Set des jours ouvrés (lun–ven UTC) couverts par un congé approuvé
+  const congeDays = new Set<string>()
   for (const c of congesMois) {
-    const d = new Date(Math.max(new Date(c.dateDebut).getTime(), debut.getTime()))
-    const f = new Date(Math.min(new Date(c.dateFin).getTime(), fin.getTime()))
-    const loop = new Date(d)
-    while (loop <= f) {
-      const dow = loop.getDay()
-      if (dow >= 1 && dow <= 5) joursConge++
-      loop.setDate(loop.getDate() + 1)
+    const dTime = Math.max(new Date(c.dateDebut).getTime(), debut.getTime())
+    const fTime = Math.min(new Date(c.dateFin).getTime(), finEffective.getTime())
+    const loop = new Date(dTime)
+    while (loop.getTime() <= fTime) {
+      const dow = loop.getUTCDay()
+      if (dow >= 1 && dow <= 5) congeDays.add(loop.toISOString().slice(0, 10))
+      loop.setUTCDate(loop.getUTCDate() + 1)
     }
   }
-  const joursAttendu = Math.max(0, joursOuvres - joursConge)
 
-  // Agrégats
-  const nbPresent      = presences.filter(p => p.statut === "PRESENT").length
-  const nbRetard       = presences.filter(p => p.statut === "RETARD").length
-  const nbAbsent       = presences.filter(p => p.statut === "ABSENT").length
-  const nbConge        = presences.filter(p => p.statut === "CONGE").length
-  const nbJourOff      = presences.filter(p => p.statut === "JOUR_OFF").length
-  const nbSaisies      = presences.filter(p => p.saisieManuelle).length
+  // Map des présences par date (clé = "YYYY-MM-DD" UTC)
+  const presenceByDate = new Map<string, typeof presences[0]>()
+  for (const p of presences) {
+    presenceByDate.set(new Date(p.date).toISOString().slice(0, 10), p)
+  }
+
+  // ── Analyse jour par jour en UTC (debut → finEffective) ───────────────────
+  let joursOuvres       = 0
+  let joursConge        = 0  // congé approuvé hors dénominateur
+  let joursAttendu      = 0  // dénominateur réel
+  let nbPresent         = 0
+  let nbRetard          = 0
+  let nbAbsentExplicite = 0  // statut ABSENT saisi manuellement
+  let nbAbsentNonSaisi  = 0  // jour ouvré attendu sans aucune saisie
+  let nbCongePresence   = 0  // statut CONGE saisi manuellement
+  let nbJourOff         = 0  // statut JOUR_OFF
+
+  const cur = new Date(debut.getTime())
+  while (cur.getTime() <= finEffective.getTime()) {
+    const dow = cur.getUTCDay()          // jour de semaine UTC
+    if (dow >= 1 && dow <= 5) {
+      joursOuvres++
+      const key = cur.toISOString().slice(0, 10)  // "YYYY-MM-DD" UTC
+      const p = presenceByDate.get(key)
+
+      if (congeDays.has(key)) {
+        joursConge++ // exclu du dénominateur
+      } else if (!p) {
+        joursAttendu++
+        nbAbsentNonSaisi++ // pas de saisie = absent non justifié
+      } else {
+        switch (p.statut) {
+          case "PRESENT":  joursAttendu++; nbPresent++;         break
+          case "RETARD":   joursAttendu++; nbRetard++;          break
+          case "ABSENT":   joursAttendu++; nbAbsentExplicite++; break
+          case "CONGE":    nbCongePresence++; break // exclu du dénominateur
+          case "JOUR_OFF": nbJourOff++;      break // exclu du dénominateur
+        }
+      }
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+
+  const totalAbsences   = nbAbsentExplicite + nbAbsentNonSaisi
   const nbPresentsTotal = nbPresent + nbRetard
-
-  // Absences non saisies = jours attendus sans aucune saisie PRESENT/RETARD/CONGE
-  const joursAvecSaisie = new Set(
-    presences
-      .filter(p => ["PRESENT", "RETARD", "CONGE"].includes(p.statut))
-      .map(p => new Date(p.date).toISOString().slice(0, 10))
-  ).size
-  const absencesNonSaisies = Math.max(0, joursAttendu - joursAvecSaisie)
-  const totalAbsences = nbAbsent + absencesNonSaisies
-
-  const totalMinRetard     = presences.reduce((s, p) => s + (p.minutesRetard ?? 0), 0)
-  const totalHeures        = presences.reduce((s, p) => s + (p.heuresTravaillees ?? 0), 0)
-  const totalHSValidees    = presences
-    .filter(p => p.statutHeuresSup === "VALIDEE")
-    .reduce((s, p) => s + p.heuresSupBrutes, 0)
-  const totalHSEnAttente   = presences
-    .filter(p => p.statutHeuresSup === "EN_ATTENTE")
-    .reduce((s, p) => s + p.heuresSupBrutes, 0)
-
-  const tauxPresence = joursAttendu > 0
+  const nbSaisies       = presences.filter(p => p.saisieManuelle).length
+  const tauxPresence    = joursAttendu > 0
     ? Math.round((nbPresentsTotal / joursAttendu) * 100)
     : 100
 
-  // ── Score ponctualité/assiduité (1-5) ────────────────────────────────────
-  // Basé sur : taux de présence + nombre/durée des retards
+  const totalMinRetard   = presences.reduce((s, p) => s + (p.minutesRetard ?? 0), 0)
+  const totalHeures      = presences.reduce((s, p) => s + (p.heuresTravaillees ?? 0), 0)
+  const totalHSValidees  = presences
+    .filter(p => p.statutHeuresSup === "VALIDEE")
+    .reduce((s, p) => s + p.heuresSupBrutes, 0)
+  const totalHSEnAttente = presences
+    .filter(p => p.statutHeuresSup === "EN_ATTENTE")
+    .reduce((s, p) => s + p.heuresSupBrutes, 0)
+
+  // ── Score ponctualité (1–5) ────────────────────────────────────────────────
   let score = 5.0
-
-  // Pénalité absences (hors congés)
-  if (totalAbsences >= 1)  score -= 0.5
-  if (totalAbsences >= 3)  score -= 0.5
-  if (totalAbsences >= 5)  score -= 1.0
-  if (totalAbsences >= 8)  score -= 1.0
-
-  // Pénalité retards (nombre)
+  if (totalAbsences >= 1) score -= 0.5
+  if (totalAbsences >= 3) score -= 0.5
+  if (totalAbsences >= 5) score -= 1.0
+  if (totalAbsences >= 8) score -= 1.0
   if (nbRetard >= 2)  score -= 0.5
   if (nbRetard >= 5)  score -= 0.5
   if (nbRetard >= 8)  score -= 0.5
   if (nbRetard >= 12) score -= 0.5
-
-  // Pénalité durée cumulée retards
   if (totalMinRetard >= 60)  score -= 0.25
   if (totalMinRetard >= 180) score -= 0.25
   if (totalMinRetard >= 360) score -= 0.25
-
-  // Bonus heures sup validées (investissement)
   if (totalHSValidees >= 5)  score += 0.25
   if (totalHSValidees >= 15) score += 0.25
-
   const scorePonctualite = Math.round(Math.min(5, Math.max(1, score)))
 
   return NextResponse.json({
     mois, annee,
     joursOuvres, joursConge, joursAttendu,
-    nbPresent, nbRetard, nbAbsent: totalAbsences, nbConge, nbJourOff, nbSaisies,
+    nbPresent, nbRetard, nbAbsent: totalAbsences,
+    nbConge: nbCongePresence, nbJourOff, nbSaisies,
     nbPresentsTotal, tauxPresence,
     totalMinRetard, totalHeures, totalHSValidees, totalHSEnAttente,
     scorePonctualite,
     presences: presences.map(p => ({
-      id:              p.id,
-      date:            p.date,
-      statut:          p.statut,
-      heureArrivee:    p.heureArrivee,
-      heureDepart:     p.heureDepart,
+      id:                p.id,
+      date:              p.date,
+      statut:            p.statut,
+      heureArrivee:      p.heureArrivee,
+      heureDepart:       p.heureDepart,
       heuresTravaillees: p.heuresTravaillees,
-      minutesRetard:   p.minutesRetard,
-      heuresSupBrutes: p.heuresSupBrutes,
-      statutHeuresSup: p.statutHeuresSup,
-      saisieManuelle:  p.saisieManuelle,
-      notes:           p.notes,
+      minutesRetard:     p.minutesRetard,
+      heuresSupBrutes:   p.heuresSupBrutes,
+      statutHeuresSup:   p.statutHeuresSup,
+      saisieManuelle:    p.saisieManuelle,
+      notes:             p.notes,
     })),
   })
 }

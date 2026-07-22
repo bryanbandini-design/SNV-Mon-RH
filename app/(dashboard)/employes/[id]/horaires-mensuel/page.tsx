@@ -73,7 +73,12 @@ function buildCalendar(mois: number, annee: number, presences: PresenceDetail[])
   const daysInMonth = new Date(annee, mois, 0).getDate()
   // Décalage pour commencer un lundi (0=dim→6, 1=lun→0, …)
   const startOffset = (firstDay.getDay() + 6) % 7
-  const cells: (null | { date: string; presence: PresenceDetail | null; isWeekend: boolean })[] = []
+
+  // Clé du jour J pour ne pas marquer les jours futurs comme absents
+  const now = new Date()
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+
+  const cells: (null | { date: string; presence: PresenceDetail | null; isWeekend: boolean; isFuture: boolean })[] = []
 
   for (let i = 0; i < startOffset; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) {
@@ -84,6 +89,7 @@ function buildCalendar(mois: number, annee: number, presences: PresenceDetail[])
       date:      key,
       presence:  presMap.get(key) ?? null,
       isWeekend: dow === 0 || dow === 6,
+      isFuture:  key > todayKey,
     })
   }
   return cells
@@ -280,7 +286,7 @@ export default function HorairesMensuelPage() {
 
     // Lignes
     const allDays = buildCalendar(mois, annee, stats.presences)
-    const workDays = allDays.filter(c => c && !c.isWeekend) as { date: string; presence: PresenceDetail | null; isWeekend: boolean }[]
+    const workDays = allDays.filter(c => c && !c.isWeekend && (!c.isFuture || c.presence !== null)) as { date: string; presence: PresenceDetail | null; isWeekend: boolean; isFuture: boolean }[]
     let row = 0
     for (const day of workDays) {
       if (y > 270) {
@@ -509,12 +515,16 @@ export default function HorairesMensuelPage() {
                   if (!cell) return <div key={idx} />
 
                   const p = cell.presence
-                  // Weekend sans saisie → case grise neutre
-                  if (cell.isWeekend && !p) return (
-                    <div key={idx} className="rounded-lg p-1.5 bg-slate-50 min-h-14 border border-slate-100">
+                  // Weekend sans saisie OU jour futur sans saisie → case grise neutre
+                  if ((cell.isWeekend || cell.isFuture) && !p) return (
+                    <div key={idx} className="rounded-lg p-1.5 min-h-14 border border-slate-100"
+                      style={{ background: cell.isFuture && !cell.isWeekend ? "#f8fafc" : "#f8fafc" }}>
                       <p className="text-[10px] font-semibold text-slate-300 text-center">
                         {parseInt(cell.date.slice(8))}
                       </p>
+                      {cell.isFuture && !cell.isWeekend && (
+                        <p className="text-[7px] text-center text-slate-300 mt-0.5">—</p>
+                      )}
                     </div>
                   )
 
@@ -575,7 +585,7 @@ export default function HorairesMensuelPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {(cells.filter(c => c && (!c.isWeekend || c.presence !== null)) as { date: string; presence: PresenceDetail | null; isWeekend: boolean }[])
+                  {(cells.filter(c => c && (!c.isWeekend || c.presence !== null) && (!c.isFuture || c.presence !== null)) as { date: string; presence: PresenceDetail | null; isWeekend: boolean; isFuture: boolean }[])
                     .map(({ date, presence: p, isWeekend }) => {
                       const statut = p ? p.statut : "ABSENT_ND"
                       const cfg = STATUT_CFG[statut]
