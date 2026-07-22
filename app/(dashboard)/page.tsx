@@ -148,10 +148,23 @@ export default async function DashboardPage() {
     ABSENT:  presencesSemaine.find(p => p.statut === "ABSENT")?._count.statut ?? 0,
   }
 
-  // Taux d'absentéisme de la semaine
-  const totalPresencesSemaine = statsPresence.PRESENT + statsPresence.RETARD + statsPresence.ABSENT
-  const tauxAbsenteisme = totalPresencesSemaine > 0
-    ? Math.round((statsPresence.ABSENT / totalPresencesSemaine) * 100)
+  // Taux d'absentéisme réel :
+  // Les absences ne sont pas toutes saisies explicitement — on les déduit :
+  // attendu = employés actifs × jours ouvrés écoulés cette semaine (lun→ven)
+  // absents  = attendu − pointages effectifs (PRESENT + RETARD) distincts par (employeId, date)
+  const jourSemaine = now.getDay() // 0=dim, 1=lun … 6=sam
+  const joursOuvresEcoules = jourSemaine === 0 ? 5 : Math.min(jourSemaine, 5)
+  const totalAttendu = totalActifs * joursOuvresEcoules
+
+  const pointagesEffectifs = await prisma.presence.groupBy({
+    by: ["employeId", "date"],
+    where: { date: { gte: lundi }, statut: { in: ["PRESENT", "RETARD"] } },
+  })
+  const nbPointagesEffectifs = pointagesEffectifs.length
+  const nbAbsencesDeduites   = Math.max(0, totalAttendu - nbPointagesEffectifs)
+
+  const tauxAbsenteisme = totalAttendu > 0
+    ? Math.round((nbAbsencesDeduites / totalAttendu) * 100)
     : 0
 
   const contratsRaw = await prisma.employe.groupBy({
@@ -180,7 +193,7 @@ export default async function DashboardPage() {
     { label: "Essais expirant", value: essaisExpiration.toString(),
       sub: "dans les 7 prochains jours", icon: FlaskConical, accent: "#f97316", bg: "#fff7ed", href: "/employes", alert: essaisExpiration > 0 },
     { label: "Taux absentéisme", value: `${tauxAbsenteisme}%`,
-      sub: `${statsPresence.ABSENT} absent(s) cette semaine`, icon: UserCheck, accent: tauxAbsenteisme >= 15 ? "#ef4444" : tauxAbsenteisme >= 8 ? "#f97316" : "#10b981", bg: tauxAbsenteisme >= 15 ? "#fef2f2" : tauxAbsenteisme >= 8 ? "#fff7ed" : "#ecfdf5", href: "/horaires", alert: tauxAbsenteisme >= 15 },
+      sub: `${nbAbsencesDeduites} absence(s) / ${totalAttendu} attendus`, icon: UserCheck, accent: tauxAbsenteisme >= 15 ? "#ef4444" : tauxAbsenteisme >= 8 ? "#f97316" : "#10b981", bg: tauxAbsenteisme >= 15 ? "#fef2f2" : tauxAbsenteisme >= 8 ? "#fff7ed" : "#ecfdf5", href: "/horaires", alert: tauxAbsenteisme >= 15 },
   ]
 
   const typeCongeLabel: Record<string, string> = {
