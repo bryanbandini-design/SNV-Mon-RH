@@ -507,23 +507,32 @@ export default function HorairesMensuelPage() {
               <div className="grid grid-cols-7 gap-1">
                 {cells.map((cell, idx) => {
                   if (!cell) return <div key={idx} />
-                  if (cell.isWeekend) return (
-                    <div key={idx} className="rounded-lg p-1.5 bg-slate-50 min-h-14">
+
+                  const p = cell.presence
+                  // Weekend sans saisie → case grise neutre
+                  if (cell.isWeekend && !p) return (
+                    <div key={idx} className="rounded-lg p-1.5 bg-slate-50 min-h-14 border border-slate-100">
                       <p className="text-[10px] font-semibold text-slate-300 text-center">
                         {parseInt(cell.date.slice(8))}
                       </p>
                     </div>
                   )
-                  const p = cell.presence
+
+                  // Jour ouvré ou weekend avec saisie → carte colorée
                   const statut = p ? p.statut : "ABSENT_ND"
                   const cfg = STATUT_CFG[statut]
                   return (
                     <div key={idx}
                       className="rounded-lg p-1.5 min-h-14 flex flex-col"
                       style={{ background: cfg.bg, border: `1px solid ${cfg.dot}25` }}>
-                      <p className="text-[10px] font-bold text-center mb-1" style={{ color: cfg.color }}>
-                        {parseInt(cell.date.slice(8))}
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] font-bold" style={{ color: cfg.color }}>
+                          {parseInt(cell.date.slice(8))}
+                        </p>
+                        {cell.isWeekend && (
+                          <span className="text-[7px] font-bold text-slate-400 bg-slate-200 px-1 rounded">WE</span>
+                        )}
+                      </div>
                       <div className="flex justify-center mb-0.5">
                         <span className="text-[8px] font-semibold px-1 py-0.5 rounded" style={{ background: cfg.dot + "20", color: cfg.color }}>
                           {cfg.label.slice(0, 6)}
@@ -566,16 +575,21 @@ export default function HorairesMensuelPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {(cells.filter(c => c && !c.isWeekend) as { date: string; presence: PresenceDetail | null }[])
-                    .map(({ date, presence: p }) => {
+                  {(cells.filter(c => c && (!c.isWeekend || c.presence !== null)) as { date: string; presence: PresenceDetail | null; isWeekend: boolean }[])
+                    .map(({ date, presence: p, isWeekend }) => {
                       const statut = p ? p.statut : "ABSENT_ND"
                       const cfg = STATUT_CFG[statut]
                       return (
-                        <tr key={date} className="hover:bg-slate-50/50">
+                        <tr key={date} className={`hover:bg-slate-50/50 ${isWeekend ? "bg-slate-50/40" : ""}`}>
                           <td className="px-4 py-2.5 whitespace-nowrap">
-                            <span className="font-medium text-slate-900">
-                              {new Date(date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-slate-900">
+                                {new Date(date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}
+                              </span>
+                              {isWeekend && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">WE</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-2.5">
                             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
