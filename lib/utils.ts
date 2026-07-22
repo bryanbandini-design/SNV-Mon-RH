@@ -77,3 +77,47 @@ export function minutesEnHeure(minutes: number): string {
   const m = minutes % 60
   return `${h}h${m.toString().padStart(2, "0")}`
 }
+
+/**
+ * Calcule heuresTravaillees, heuresSupBrutes et statutHeuresSup à partir
+ * des heures réelles et des bornes de shift de référence.
+ *
+ * - Arrivée AVANT debutRef  → HS en début (avant prise de service)
+ * - Départ  APRÈS finRef    → HS en fin   (dépassement de shift)
+ * - heuresTravaillees est capé à la plage [debutRef, finRef] pour le salaire
+ */
+export function calculerHS(params: {
+  heureArrivee:      string
+  heureDepart:       string
+  heureDebutShiftRef?: string | null
+  heureFinShiftRef?:  string | null
+}): { heuresTravaillees: number; heuresSupBrutes: number; statutHeuresSup: string } {
+  const debut    = heureEnMinutes(params.heureArrivee)
+  const fin      = heureEnMinutes(params.heureDepart)
+  const debutRef = params.heureDebutShiftRef ? heureEnMinutes(params.heureDebutShiftRef) : null
+  const finRef   = params.heureFinShiftRef   ? heureEnMinutes(params.heureFinShiftRef)   : null
+
+  let heuresSupBrutes  = 0
+  let statutHeuresSup  = "N/A"
+
+  // HS avant prise de service (arrivée anticipée)
+  if (debutRef !== null && debut < debutRef) {
+    heuresSupBrutes += (debutRef - debut) / 60
+    statutHeuresSup  = "EN_ATTENTE"
+  }
+
+  // Point de départ "normal" : début effectif de la plage rémunérée
+  const debutEffectif = debutRef !== null ? Math.max(debut, debutRef) : debut
+
+  let heuresTravaillees: number
+  if (finRef !== null && fin > finRef) {
+    // HS après fin de shift
+    heuresTravaillees  = Math.max(0, finRef - debutEffectif) / 60
+    heuresSupBrutes   += (fin - finRef) / 60
+    statutHeuresSup    = "EN_ATTENTE"
+  } else {
+    heuresTravaillees  = Math.max(0, fin - debutEffectif) / 60
+  }
+
+  return { heuresTravaillees, heuresSupBrutes, statutHeuresSup }
+}

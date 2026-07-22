@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { heureEnMinutes } from "@/lib/utils"
+import { heureEnMinutes, calculerHS } from "@/lib/utils"
 import { creerRetenueProvisoire, calculerRetenueRetard } from "@/lib/retenues"
 import { requireRole } from "@/lib/auth-guards"
 
@@ -106,28 +106,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let heuresSupBrutes = 0
   let statutHeuresSup = "N/A"
 
-  if (data.heureArrivee && data.heureDepart) {
-    const debut  = heureEnMinutes(data.heureArrivee)
-    const fin    = heureEnMinutes(data.heureDepart)
-    const rawMin = Math.max(0, fin - debut)
+  const heureDebutRef: string | null = data.heureDebutShiftRef ?? data.heureReferenceDebut ?? null
 
-    if (data.heureFinShiftRef) {
-      const finShift = heureEnMinutes(data.heureFinShiftRef)
-      if (fin > finShift) {
-        heuresTravaillees = Math.max(0, finShift - debut) / 60
-        heuresSupBrutes   = (fin - finShift) / 60
-        statutHeuresSup   = "EN_ATTENTE"
-      } else {
-        heuresTravaillees = rawMin / 60
-      }
-    } else {
-      heuresTravaillees = rawMin / 60
-    }
+  if (data.heureArrivee && data.heureDepart) {
+    const hs = calculerHS({
+      heureArrivee:       data.heureArrivee,
+      heureDepart:        data.heureDepart,
+      heureDebutShiftRef: heureDebutRef,
+      heureFinShiftRef:   data.heureFinShiftRef ?? null,
+    })
+    heuresTravaillees = hs.heuresTravaillees
+    heuresSupBrutes   = hs.heuresSupBrutes
+    statutHeuresSup   = hs.statutHeuresSup
   }
 
-  if (data.heureArrivee && data.heureReferenceDebut) {
+  if (data.heureArrivee && heureDebutRef) {
     const arrivee   = heureEnMinutes(data.heureArrivee)
-    const reference = heureEnMinutes(data.heureReferenceDebut)
+    const reference = heureEnMinutes(heureDebutRef)
     minutesRetard = Math.max(0, arrivee - reference)
   }
 
@@ -142,6 +137,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       notes: data.notes || null,
       heuresSupBrutes,
       statutHeuresSup,
+      heureDebutShiftRef: heureDebutRef || null,
       heureFinShiftRef: data.heureFinShiftRef || null,
     },
   })

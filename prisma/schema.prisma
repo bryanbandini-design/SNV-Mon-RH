@@ -388,9 +388,10 @@ model Presence {
   saisieParNom      String?  // nom de la personne ayant saisi
   motifManuel       String?  // motif de la saisie manuelle
   // ── Heures supplémentaires (validation admin obligatoire) ──────────────────
-  heuresSupBrutes   Float    @default(0)      // heures au-delà de la fin de shift
-  statutHeuresSup   String   @default("N/A")  // N/A | EN_ATTENTE | VALIDEE | REJETEE
-  heureFinShiftRef  String?                   // fin de shift de référence ex: "15:30"
+  heuresSupBrutes    Float    @default(0)      // heures hors plage shift (avant + après)
+  statutHeuresSup    String   @default("N/A")  // N/A | EN_ATTENTE | VALIDEE | REJETEE
+  heureDebutShiftRef String?                   // début de shift de référence ex: "07:00"
+  heureFinShiftRef   String?                   // fin de shift de référence ex: "15:30"
   createdAt         DateTime @default(now())
 
   employe        Employe         @relation(fields: [employeId], references: [id], onDelete: Cascade)

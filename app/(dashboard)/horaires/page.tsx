@@ -23,7 +23,7 @@ type Presence    = {
   id: string; date: string; heureArrivee: string | null; heureDepart: string | null
   heuresTravaillees: number | null; minutesRetard: number; statut: string; notes: string | null
   saisieManuelle: boolean; statutValidation: string; saisieParNom: string | null; motifManuel: string | null
-  heuresSupBrutes: number; statutHeuresSup: string; heureFinShiftRef: string | null
+  heuresSupBrutes: number; statutHeuresSup: string; heureDebutShiftRef: string | null; heureFinShiftRef: string | null
   employeId: string
   employe: { prenom: string; nom: string; matricule: string; poste: string }
 }
@@ -116,13 +116,26 @@ function RoleBadge({ role }: { role?: string | null }) {
 }
 
 // ── Calcul prévisualisation heures supp ─────────────────────────────────────
-function previewHS(arrivee: string, depart: string, finShift: string): { normal: number; sup: number } | null {
-  if (!arrivee || !depart || !finShift) return null
-  const debut = heureEnMinutes(arrivee)
-  const fin   = heureEnMinutes(depart)
-  const fs    = heureEnMinutes(finShift)
-  if (fin <= fs) return null
-  return { normal: Math.max(0, fs - debut) / 60, sup: (fin - fs) / 60 }
+function previewHS(
+  arrivee: string, depart: string,
+  debutShift: string, finShift: string,
+): { normal: number; supAvant: number; supApres: number } | null {
+  if (!arrivee || !depart) return null
+  const debut    = heureEnMinutes(arrivee)
+  const fin      = heureEnMinutes(depart)
+  const debutRef = debutShift ? heureEnMinutes(debutShift) : null
+  const finRef   = finShift   ? heureEnMinutes(finShift)   : null
+  if (debutRef === null && finRef === null) return null
+
+  const supAvant  = debutRef !== null && debut < debutRef ? (debutRef - debut) / 60 : 0
+  const debutEff  = debutRef !== null ? Math.max(debut, debutRef) : debut
+  const supApres  = finRef   !== null && fin   > finRef   ? (fin   - finRef)   / 60 : 0
+  const normal    = finRef   !== null
+    ? Math.max(0, Math.min(fin, finRef) - debutEff) / 60
+    : Math.max(0, fin - debutEff) / 60
+
+  if (supAvant === 0 && supApres === 0) return null
+  return { normal, supAvant, supApres }
 }
 
 const HS_CFG = {
@@ -183,9 +196,11 @@ export default function HorairesPage() {
   const [resyncingHS,  setResyncingHS]  = useState(false)
   const [formManuel, setFormManuel] = useState({
     employeId: "", date: new Date().toISOString().split("T")[0],
-    heureArrivee: "", heureDepart: "", heureFinShiftRef: "",
+    heureArrivee: "", heureDepart: "",
+    heureDebutShiftRef: "", heureFinShiftRef: "",
     motifManuel: "Rattrapage de données", notes: "",
   })
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [savingManuel, setSavingManuel] = useState(false)
   const [editingManuelId, setEditingManuelId] = useState<string | null>(null)
   const formManuelRef = useRef<HTMLDivElement>(null)
@@ -208,6 +223,18 @@ export default function HorairesPage() {
   const [addingEmp,      setAddingEmp]      = useState(false)
   const [removingId,     setRemovingId]     = useState<string | null>(null)
 
+  // Tri : date DESC, puis heureArrivee ASC dans la même journée
+  function trierSaisies(liste: Presence[]): Presence[] {
+    return [...liste].sort((a, b) => {
+      const da = new Date(a.date).getTime()
+      const db = new Date(b.date).getTime()
+      if (da !== db) return db - da                       // plus récent d'abord
+      const ha = a.heureArrivee ?? "00:00"
+      const hb = b.heureArrivee ?? "00:00"
+      return ha.localeCompare(hb)                         // plus tôt d'abord dans la journée
+    })
+  }
+
   useEffect(() => {
     Promise.all([
       fetch("/api/employes").then(r => r.ok ? r.json() : []),
@@ -227,7 +254,7 @@ export default function HorairesPage() {
     setSaisiesMLoading(true)
     fetch("/api/presences?manuel=all")
       .then(r => r.ok ? r.json() : [])
-      .then(d => { if (Array.isArray(d)) setSaisiesManuelle(d) })
+      .then(d => { if (Array.isArray(d)) setSaisiesManuelle(trierSaisies(d)) })
       .finally(() => setSaisiesMLoading(false))
   }, [onglet])
 
@@ -297,24 +324,27 @@ export default function HorairesPage() {
     }
     setSavingManuel(true)
 
+    const RESET_MANUEL = { employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureDebutShiftRef: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" }
+
     // Mode édition : PATCH sur la présence existante
     if (editingManuelId) {
       const res = await fetch(`/api/presences/${editingManuelId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          heureArrivee:     formManuel.heureArrivee,
-          heureDepart:      formManuel.heureDepart,
-          heureFinShiftRef: formManuel.heureFinShiftRef || null,
-          notes:            formManuel.notes,
+          heureArrivee:       formManuel.heureArrivee,
+          heureDepart:        formManuel.heureDepart,
+          heureDebutShiftRef: formManuel.heureDebutShiftRef || null,
+          heureFinShiftRef:   formManuel.heureFinShiftRef   || null,
+          notes:              formManuel.notes,
         }),
       })
       if (res.ok) {
         const updated = await res.json()
         const emp = employes.find(x => x.id === formManuel.employeId)
-        setSaisiesManuelle(prev => prev.map(s => s.id === editingManuelId ? { ...s, ...updated, employe: emp ?? s.employe } : s))
+        setSaisiesManuelle(prev => trierSaisies(prev.map(s => s.id === editingManuelId ? { ...s, ...updated, employe: emp ?? s.employe } : s)))
         setEditingManuelId(null)
-        setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
+        setFormManuel(RESET_MANUEL)
         toast.success("Saisie mise à jour")
       } else { toast.error("Erreur lors de la mise à jour") }
       setSavingManuel(false)
@@ -334,11 +364,25 @@ export default function HorairesPage() {
     if (res.ok) {
       const p = await res.json()
       const emp = employes.find(x => x.id === formManuel.employeId)
-      setSaisiesManuelle(prev => [{ ...p, employe: emp! }, ...prev])
-      setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
+      setSaisiesManuelle(prev => trierSaisies([{ ...p, employe: emp! }, ...prev]))
+      setFormManuel(RESET_MANUEL)
       toast.success("Saisie soumise — en attente de validation administrateur")
     } else { toast.error("Erreur lors de la soumission") }
     setSavingManuel(false)
+  }
+
+  // ── Saisie manuelle — supprimer (ADMIN) ─────────────────────────────────────
+  async function supprimerSaisie(id: string) {
+    if (!confirm("Supprimer définitivement cette saisie ?")) return
+    setDeletingId(id)
+    const res = await fetch(`/api/presences/${id}`, { method: "DELETE" })
+    if (res.ok) {
+      setSaisiesManuelle(prev => prev.filter(s => s.id !== id))
+      toast.success("Saisie supprimée")
+    } else {
+      toast.error("Erreur lors de la suppression")
+    }
+    setDeletingId(null)
   }
 
   // ── Heures supplémentaires — valider/rejeter (ADMIN) ────────────────────────
@@ -1121,7 +1165,7 @@ export default function HorairesPage() {
                   type="button"
                   onClick={() => {
                     setEditingManuelId(null)
-                    setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
+                    setFormManuel({ employeId: "", date: new Date().toISOString().split("T")[0], heureArrivee: "", heureDepart: "", heureDebutShiftRef: "", heureFinShiftRef: "", motifManuel: "Rattrapage de données", notes: "" })
                   }}
                   className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-slate-100"
                 >
@@ -1158,9 +1202,20 @@ export default function HorairesPage() {
                   <Input type="time" value={formManuel.heureDepart} onChange={e => setFormManuel(p => ({ ...p, heureDepart: e.target.value }))} className="h-9" required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-600">Shift de référence (fin)</Label>
+                  <Label className="text-xs font-medium text-slate-600">Prise de service (début shift)</Label>
+                  <Select value={formManuel.heureDebutShiftRef} onValueChange={v => setFormManuel(p => ({ ...p, heureDebutShiftRef: v }))}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Non défini" /></SelectTrigger>
+                    <SelectContent>
+                      {shifts.map(s => (
+                        <SelectItem key={s.id} value={s.heureDebut}>{s.nom} — début à {s.heureDebut}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600">Fin de service (fin shift)</Label>
                   <Select value={formManuel.heureFinShiftRef} onValueChange={v => setFormManuel(p => ({ ...p, heureFinShiftRef: v }))}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Aucun cap d'heures" /></SelectTrigger>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Non défini" /></SelectTrigger>
                     <SelectContent>
                       {shifts.map(s => (
                         <SelectItem key={s.id} value={s.heureFin}>{s.nom} — fin à {s.heureFin}</SelectItem>
@@ -1176,16 +1231,19 @@ export default function HorairesPage() {
 
               {/* Prévisualisation HS */}
               {(() => {
-                const hs = previewHS(formManuel.heureArrivee, formManuel.heureDepart, formManuel.heureFinShiftRef)
+                const hs = previewHS(formManuel.heureArrivee, formManuel.heureDepart, formManuel.heureDebutShiftRef, formManuel.heureFinShiftRef)
                 if (!hs) return null
+                const totalSup = hs.supAvant + hs.supApres
                 return (
                   <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                     <Timer className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-amber-800">
-                      <p className="font-semibold">Dépassement de shift détecté</p>
-                      <p className="text-xs mt-0.5">
-                        Heures autorisées : <strong>{hs.normal.toFixed(1)}h</strong> — Heures supplémentaires : <strong>+{hs.sup.toFixed(1)}h</strong> (validation admin requise)
-                      </p>
+                      <p className="font-semibold">Heures hors plage détectées — validation admin requise</p>
+                      <div className="text-xs mt-1 space-y-0.5">
+                        {hs.supAvant > 0 && <p>Avant prise de service : <strong>+{hs.supAvant.toFixed(1)}h</strong></p>}
+                        {hs.supApres > 0 && <p>Après fin de service : <strong>+{hs.supApres.toFixed(1)}h</strong></p>}
+                        <p>Heures normales : <strong>{hs.normal.toFixed(1)}h</strong> — Total HS : <strong>+{totalSup.toFixed(1)}h</strong></p>
+                      </div>
                     </div>
                   </div>
                 )
@@ -1284,24 +1342,35 @@ export default function HorairesPage() {
                         {/* Boutons modification + validation saisie + HS */}
                         <div className="flex flex-col gap-2 flex-shrink-0">
                           {isAdmin && (
-                            <button
-                              onClick={() => {
-                                setEditingManuelId(s.id)
-                                setFormManuel({
-                                  employeId:        s.employeId ?? "",
-                                  date:             new Date(s.date).toISOString().split("T")[0],
-                                  heureArrivee:     s.heureArrivee ?? "",
-                                  heureDepart:      s.heureDepart  ?? "",
-                                  heureFinShiftRef: s.heureFinShiftRef ?? "",
-                                  motifManuel:      s.motifManuel ?? "Rattrapage de données",
-                                  notes:            s.notes ?? "",
-                                })
-                                setTimeout(() => formManuelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
-                            >
-                              <Pencil className="h-3.5 w-3.5" /> Modifier
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setEditingManuelId(s.id)
+                                  setFormManuel({
+                                    employeId:          s.employeId ?? "",
+                                    date:               new Date(s.date).toISOString().split("T")[0],
+                                    heureArrivee:       s.heureArrivee ?? "",
+                                    heureDepart:        s.heureDepart  ?? "",
+                                    heureDebutShiftRef: s.heureDebutShiftRef ?? "",
+                                    heureFinShiftRef:   s.heureFinShiftRef ?? "",
+                                    motifManuel:        s.motifManuel ?? "Rattrapage de données",
+                                    notes:              s.notes ?? "",
+                                  })
+                                  setTimeout(() => formManuelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
+                              >
+                                <Pencil className="h-3.5 w-3.5" /> Modifier
+                              </button>
+                              <button
+                                onClick={() => supprimerSaisie(s.id)}
+                                disabled={deletingId === s.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60 transition-colors"
+                              >
+                                {deletingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                                Supprimer
+                              </button>
+                            </div>
                           )}
                           {isAdmin && isPending && (
                             <div className="flex items-center gap-2">
