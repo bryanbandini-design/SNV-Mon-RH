@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useMemo, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   Plus, Star, TrendingUp, ChevronDown, ChevronUp, Loader2,
   Trash2, Eye, Send, FileText, Target, Zap, Award,
-  Users, BarChart2, RefreshCw, Pencil, Check, X,
+  Users, BarChart2, RefreshCw, Pencil, Check, X, Clock,
 } from "lucide-react"
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -106,7 +106,8 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export default function EvaluationsPage() {
+function EvaluationsPage() {
+  const searchParams = useSearchParams()
   const router = useRouter()
   const [evaluations, setEvaluations] = useState<Evaluation[]>([])
   const [employes,    setEmployes]    = useState<Employe[]>([])
@@ -135,6 +136,15 @@ export default function EvaluationsPage() {
   const [objectifs, setObjectifs] = useState<Objectif[]>([])
   const [actions,   setActions]   = useState<Action[]>([])
 
+  // Stats horaires auto-chargées quand on sélectionne un employé
+  type StatsHoraires = {
+    scorePonctualite: number; tauxPresence: number; nbRetard: number
+    nbAbsent: number; totalMinRetard: number; totalHSValidees: number
+    mois: number; annee: number; nbPresentsTotal: number; joursAttendu: number
+  }
+  const [statsHoraires,  setStatsHoraires]  = useState<StatsHoraires | null>(null)
+  const [loadingStats,   setLoadingStats]   = useState(false)
+
   // ── Load ──────────────────────────────────────────────────────────────────
 
   async function load() {
@@ -149,6 +159,39 @@ export default function EvaluationsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Pré-sélection employé depuis URL (venant de horaires-mensuel)
+  useEffect(() => {
+    const empId    = searchParams.get("employeId")
+    const prefill  = searchParams.get("prefillPonctualite")
+    const moisUrl  = searchParams.get("mois")
+    const anneeUrl = searchParams.get("annee")
+    if (empId) {
+      setForm(p => ({ ...p, employeId: empId }))
+      setTab("nouveau")
+    }
+    if (prefill && moisUrl && anneeUrl) {
+      const score = parseInt(prefill)
+      const mois  = parseInt(moisUrl)
+      const annee = parseInt(anneeUrl)
+      setNotes(prev => prev.map(n =>
+        n.critere === "ponctualite"
+          ? { ...n, note: score, commentaire: `Score calculé automatiquement depuis les horaires (${["","","","","","Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"][mois]} ${annee})` }
+          : n
+      ))
+    }
+  }, [searchParams])
+
+  // Chargement automatique des stats horaires quand un employé est sélectionné
+  useEffect(() => {
+    if (!form.employeId) { setStatsHoraires(null); return }
+    const now = new Date()
+    setLoadingStats(true)
+    fetch(`/api/employes/${form.employeId}/stats-horaires?mois=${now.getMonth() + 1}&annee=${now.getFullYear()}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setStatsHoraires(d); setLoadingStats(false) })
+      .catch(() => setLoadingStats(false))
+  }, [form.employeId])
 
   // ── Filtered list ─────────────────────────────────────────────────────────
 
@@ -758,17 +801,82 @@ export default function EvaluationsPage() {
               </div>
             )}
 
+            {/* Bannière stats horaires */}
+            {form.employeId && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-indigo-600" />
+                    <p className="text-xs font-semibold text-indigo-800 uppercase tracking-wide">
+                      Données horaires du mois en cours
+                    </p>
+                  </div>
+                  {loadingStats && <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />}
+                </div>
+                {statsHoraires && !loadingStats ? (
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex gap-4 flex-wrap">
+                      {[
+                        { label: "Présence",  val: `${statsHoraires.tauxPresence}%`, ok: statsHoraires.tauxPresence >= 90 },
+                        { label: "Retards",   val: statsHoraires.nbRetard.toString(), ok: statsHoraires.nbRetard === 0 },
+                        { label: "Absences",  val: statsHoraires.nbAbsent.toString(), ok: statsHoraires.nbAbsent === 0 },
+                        { label: "HS validées",val: `${statsHoraires.totalHSValidees.toFixed(1)}h`, ok: true },
+                      ].map(k => (
+                        <div key={k.label} className="text-center">
+                          <p className={`text-lg font-black ${k.ok ? "text-emerald-700" : "text-red-600"}`}>{k.val}</p>
+                          <p className="text-[10px] text-indigo-600 font-medium">{k.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="ml-auto flex items-center gap-3">
+                      <div className="text-center">
+                        <p className="text-xs text-indigo-600 font-medium mb-0.5">Score ponctualité calculé</p>
+                        <p className="text-2xl font-black text-indigo-800">{statsHoraires.scorePonctualite}/5</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sc = statsHoraires.scorePonctualite
+                          const MOIS_FR = ["","Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+                          setNotes(prev => prev.map(n =>
+                            n.critere === "ponctualite"
+                              ? { ...n, note: sc, commentaire: `Score auto : ${statsHoraires.tauxPresence}% présence, ${statsHoraires.nbRetard} retard(s), ${statsHoraires.nbAbsent} absence(s) — ${MOIS_FR[statsHoraires.mois]} ${statsHoraires.annee}` }
+                              : n
+                          ))
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors"
+                      >
+                        <Zap className="h-3.5 w-3.5" /> Auto-remplir ponctualité
+                      </button>
+                    </div>
+                  </div>
+                ) : !loadingStats ? (
+                  <p className="text-xs text-indigo-500">Aucune donnée horaire pour cet employé ce mois-ci.</p>
+                ) : null}
+              </div>
+            )}
+
             {/* Critères */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Grille d'évaluation</p>
               <div className="space-y-2">
                 {CRITERES_EVALUATION.map(c => {
                   const n = notes.find(x => x.critere === c.id)!
+                  const isAuto = c.id === "ponctualite" && n.note > 0 && n.commentaire.startsWith("Score auto")
                   return (
-                    <div key={c.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-4 space-y-2">
+                    <div key={c.id}
+                      className="rounded-lg border p-4 space-y-2"
+                      style={{ borderColor: isAuto ? "#a5b4fc" : "#f1f5f9", background: isAuto ? "#eef2ff" : "#f8fafc80" }}>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold text-slate-800">{c.label}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-slate-800">{c.label}</p>
+                            {isAuto && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 flex items-center gap-1">
+                                <Zap className="h-2.5 w-2.5" /> Auto horaires
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-400 mt-0.5">{c.description}</p>
                         </div>
                         <StarRating value={n.note} onChange={v => updateNote(c.id, v)} />
@@ -911,5 +1019,13 @@ export default function EvaluationsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function EvaluationsPageWrapper() {
+  return (
+    <Suspense>
+      <EvaluationsPage />
+    </Suspense>
   )
 }

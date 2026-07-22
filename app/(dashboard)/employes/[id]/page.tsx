@@ -94,6 +94,12 @@ export default async function EmployePage({ params }: { params: Promise<{ id: st
         </Link>
         <div className="flex items-center gap-2 flex-wrap">
           <AttestationButtons employeId={employe.id} />
+          <Link href={`/employes/${employe.id}/horaires-mensuel`}>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors">
+              <Clock className="h-4 w-4" />
+              Rapport horaire
+            </button>
+          </Link>
           <Link href={`/employes/${employe.id}/modifier`}>
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <Edit className="h-4 w-4" />
