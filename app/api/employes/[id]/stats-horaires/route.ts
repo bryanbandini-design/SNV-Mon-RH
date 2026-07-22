@@ -14,12 +14,28 @@ export async function GET(
   const mois  = parseInt(searchParams.get("mois")  ?? String(new Date().getMonth() + 1))
   const annee = parseInt(searchParams.get("annee") ?? String(new Date().getFullYear()))
 
+  // Récupère le jour de repos de l'employé pour savoir s'il travaille sam ou dim
+  const employe = await prisma.employe.findUnique({
+    where: { id },
+    select: { jourRepos: true },
+  })
+  const jourRepos = employe?.jourRepos ?? null  // "SAMEDI" | "DIMANCHE" | null
+
+  // Jour ouvré = lun-ven + le 6e jour selon le jour de repos
+  // jourRepos="DIMANCHE" → repos dim → travaille sam (dow=6)
+  // jourRepos="SAMEDI"   → repos sam → travaille dim (dow=0)
+  function isJourOuvre(dow: number): boolean {
+    if (dow >= 1 && dow <= 5) return true
+    if (dow === 6 && jourRepos === "DIMANCHE") return true
+    if (dow === 0 && jourRepos === "SAMEDI")   return true
+    return false
+  }
+
   // Dates en UTC pur — évite le décalage timezone côté serveur (ex: France UTC+2)
   const debut = new Date(Date.UTC(annee, mois - 1, 1))
   const fin   = new Date(Date.UTC(annee, mois, 0, 23, 59, 59, 999))
 
-  // "Aujourd'hui" selon la date locale de la machine (ex: 22 juillet en France)
-  // On reconstruit en UTC pour rester cohérent avec les dates Prisma
+  // "Aujourd'hui" en UTC pour cap au jour J
   const now = new Date()
   const todayEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999))
   const finEffective = new Date(Math.min(fin.getTime(), todayEnd.getTime()))
@@ -40,15 +56,14 @@ export async function GET(
     },
   })
 
-  // Set des jours ouvrés (lun–ven UTC) couverts par un congé approuvé
+  // Set des jours ouvrés couverts par un congé approuvé
   const congeDays = new Set<string>()
   for (const c of congesMois) {
     const dTime = Math.max(new Date(c.dateDebut).getTime(), debut.getTime())
     const fTime = Math.min(new Date(c.dateFin).getTime(), finEffective.getTime())
     const loop = new Date(dTime)
     while (loop.getTime() <= fTime) {
-      const dow = loop.getUTCDay()
-      if (dow >= 1 && dow <= 5) congeDays.add(loop.toISOString().slice(0, 10))
+      if (isJourOuvre(loop.getUTCDay())) congeDays.add(loop.toISOString().slice(0, 10))
       loop.setUTCDate(loop.getUTCDate() + 1)
     }
   }
@@ -72,24 +87,24 @@ export async function GET(
 
   const cur = new Date(debut.getTime())
   while (cur.getTime() <= finEffective.getTime()) {
-    const dow = cur.getUTCDay()          // jour de semaine UTC
-    if (dow >= 1 && dow <= 5) {
+    const dow = cur.getUTCDay()
+    if (isJourOuvre(dow)) {
       joursOuvres++
-      const key = cur.toISOString().slice(0, 10)  // "YYYY-MM-DD" UTC
+      const key = cur.toISOString().slice(0, 10)
       const p = presenceByDate.get(key)
 
       if (congeDays.has(key)) {
-        joursConge++ // exclu du dénominateur
+        joursConge++
       } else if (!p) {
         joursAttendu++
-        nbAbsentNonSaisi++ // pas de saisie = absent non justifié
+        nbAbsentNonSaisi++
       } else {
         switch (p.statut) {
           case "PRESENT":  joursAttendu++; nbPresent++;         break
           case "RETARD":   joursAttendu++; nbRetard++;          break
           case "ABSENT":   joursAttendu++; nbAbsentExplicite++; break
-          case "CONGE":    nbCongePresence++; break // exclu du dénominateur
-          case "JOUR_OFF": nbJourOff++;      break // exclu du dénominateur
+          case "CONGE":    nbCongePresence++; break
+          case "JOUR_OFF": nbJourOff++;      break
         }
       }
     }

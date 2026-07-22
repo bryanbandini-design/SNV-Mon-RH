@@ -53,6 +53,7 @@ export default function ModifierEmployePage() {
         dateDebutEssai: emp.dateDebutEssai  ? emp.dateDebutEssai.split("T")[0] : "",
         dateFinEssai:   emp.dateFinEssai    ? emp.dateFinEssai.split("T")[0]   : "",
         notes:          emp.notes           ?? "",
+        jourRepos:      emp.jourRepos       ?? "",
       })
       setPeriodeEssai(emp.periodeEssai ?? false)
       if (Array.isArray(allEmps)) setEmployes(allEmps.filter((e: { id: string }) => e.id !== id))
@@ -156,6 +157,17 @@ export default function ModifierEmployePage() {
               <Select value={form.statut ?? "ACTIF"} onValueChange={v => set("statut", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{STATUTS_EMPLOYE.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Jour de repos hebdomadaire</Label>
+              <Select value={form.jourRepos ?? ""} onValueChange={v => set("jourRepos", v)}>
+                <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DIMANCHE">Dimanche (travail lun–sam)</SelectItem>
+                  <SelectItem value="SAMEDI">Samedi (travail lun–ven + dim)</SelectItem>
+                  <SelectItem value="">Semaine 5 jours (lun–ven)</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Date d&apos;embauche *</Label><Input type="date" value={form.dateEmbauche ?? ""} onChange={e => set("dateEmbauche", e.target.value)} required /></div>

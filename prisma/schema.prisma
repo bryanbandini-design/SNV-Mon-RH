@@ -56,6 +56,7 @@ model Employe {
   updatedAt        DateTime  @updatedAt
 
   roleOrg                String    @default("EMPLOYE")  // EMPLOYE | RESPONSABLE | RH | ADMIN (rôle organisationnel, indépendant du compte)
+  jourRepos              String?   // "SAMEDI" | "DIMANCHE" | null (5 jours lun-ven)
   faceDescriptor         String?   // JSON : Float32Array[128] sérialisé pour face-api.js
   managerId              String?   // référence vers un autre Employe (organigramme)
   contactUrgenceNom      String?

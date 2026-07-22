@@ -44,6 +44,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       notes: data.notes || null,
       managerId: data.managerId || null,
       roleOrg: data.roleOrg || "EMPLOYE",
+      jourRepos: data.jourRepos || null,
       contactUrgenceNom: data.contactUrgenceNom || null,
       contactUrgenceTel: data.contactUrgenceTel || null,
     },

@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       notes: data.notes || null,
       managerId: data.managerId || null,
       roleOrg: data.roleOrg || "EMPLOYE",
+      jourRepos: data.jourRepos || null,
     },
   })
 
