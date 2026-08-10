@@ -52,11 +52,14 @@ export async function POST(req: Request) {
   const heureDebutRef: string | null = data.heureDebutShiftRef ?? data.heureReferenceDebut ?? null
 
   if (data.heureArrivee && data.heureDepart) {
+    const dow       = new Date(data.date).getUTCDay()
+    const isWeekend = dow === 0 || dow === 6
     const hs = calculerHS({
-      heureArrivee:      data.heureArrivee,
-      heureDepart:       data.heureDepart,
+      heureArrivee:       data.heureArrivee,
+      heureDepart:        data.heureDepart,
       heureDebutShiftRef: heureDebutRef,
-      heureFinShiftRef:  data.heureFinShiftRef ?? null,
+      heureFinShiftRef:   data.heureFinShiftRef ?? null,
+      isWeekend,
     })
     heuresTravaillees = hs.heuresTravaillees
     heuresSupBrutes   = hs.heuresSupBrutes

@@ -27,9 +27,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     if (data.action === "VALIDER" && existing.heureArrivee && existing.heureDepart && existing.heuresTravaillees === null) {
-      const debut = heureEnMinutes(existing.heureArrivee)
-      const fin   = heureEnMinutes(existing.heureDepart)
-      updateData.heuresTravaillees = Math.max(0, fin - debut) / 60
+      const dow = new Date(existing.date).getUTCDay()
+      const hs  = calculerHS({
+        heureArrivee:       existing.heureArrivee,
+        heureDepart:        existing.heureDepart,
+        heureDebutShiftRef: existing.heureDebutShiftRef,
+        heureFinShiftRef:   existing.heureFinShiftRef,
+        isWeekend:          dow === 0 || dow === 6,
+      })
+      updateData.heuresTravaillees = hs.heuresTravaillees
+      if (existing.heuresSupBrutes === 0) {
+        updateData.heuresSupBrutes = hs.heuresSupBrutes
+        updateData.statutHeuresSup = hs.statutHeuresSup
+      }
     }
 
     const presence = await prisma.presence.update({
@@ -81,18 +91,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!existing) return NextResponse.json({ message: "Non trouvé" }, { status: 404 })
 
     if (data.action === "VALIDER_HS") {
-      // Ajouter les HS brutes aux heures comptabilisées
+      // HS validées : statut seul. heuresTravaillees reste capé (shift uniquement).
+      // Les totaux incluent les HS via heuresSupBrutes + statutHeuresSup=VALIDEE.
       const presence = await prisma.presence.update({
         where: { id },
-        data: {
-          heuresTravaillees: (existing.heuresTravaillees ?? 0) + existing.heuresSupBrutes,
-          statutHeuresSup: "VALIDEE",
-        },
+        data: { statutHeuresSup: "VALIDEE" },
       })
       return NextResponse.json(presence)
     }
 
-    // REJETER_HS : heuresTravaillees reste capé — juste mise à jour du statut
+    // REJETER_HS : HS annulées — statut uniquement, aucun impact sur heuresTravaillees
     const presence = await prisma.presence.update({
       where: { id },
       data: { statutHeuresSup: "REJETEE" },
@@ -109,11 +117,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const heureDebutRef: string | null = data.heureDebutShiftRef ?? data.heureReferenceDebut ?? null
 
   if (data.heureArrivee && data.heureDepart) {
+    const existing2 = await prisma.presence.findUnique({ where: { id }, select: { date: true } })
+    const dow       = existing2 ? new Date(existing2.date).getUTCDay() : 1
+    const isWeekend = dow === 0 || dow === 6
     const hs = calculerHS({
       heureArrivee:       data.heureArrivee,
       heureDepart:        data.heureDepart,
       heureDebutShiftRef: heureDebutRef,
       heureFinShiftRef:   data.heureFinShiftRef ?? null,
+      isWeekend,
     })
     heuresTravaillees = hs.heuresTravaillees
     heuresSupBrutes   = hs.heuresSupBrutes

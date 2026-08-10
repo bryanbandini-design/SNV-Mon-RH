@@ -79,26 +79,30 @@ export function minutesEnHeure(minutes: number): string {
 }
 
 /**
- * Calcule heuresTravaillees, heuresSupBrutes et statutHeuresSup à partir
- * des heures réelles et des bornes de shift de référence.
+ * Calcule heuresTravaillees, heuresSupBrutes et statutHeuresSup.
  *
- * - Arrivée AVANT debutRef  → HS en début (avant prise de service)
- * - Départ  APRÈS finRef    → HS en fin   (dépassement de shift)
- * - heuresTravaillees est capé à la plage [debutRef, finRef] pour le salaire
+ * Règles métier SANOVIA :
+ * - Semaine (lun-ven) : 7h30 présence − 30 min pause → plafond 7h effectif
+ * - Weekend (sam-dim) : 5h30 présence − 30 min pause → plafond 5h effectif
+ * - HS = temps hors plage shift ; stockées séparément, ne gonflent pas heuresTravaillees
  */
 export function calculerHS(params: {
-  heureArrivee:      string
-  heureDepart:       string
+  heureArrivee:       string
+  heureDepart:        string
   heureDebutShiftRef?: string | null
   heureFinShiftRef?:  string | null
+  isWeekend?:         boolean
 }): { heuresTravaillees: number; heuresSupBrutes: number; statutHeuresSup: string } {
+  const PAUSE_H   = 0.5   // 30 min pause obligatoire
+  const PLAFOND_H = params.isWeekend ? 5.0 : 7.0
+
   const debut    = heureEnMinutes(params.heureArrivee)
   const fin      = heureEnMinutes(params.heureDepart)
   const debutRef = params.heureDebutShiftRef ? heureEnMinutes(params.heureDebutShiftRef) : null
   const finRef   = params.heureFinShiftRef   ? heureEnMinutes(params.heureFinShiftRef)   : null
 
-  let heuresSupBrutes  = 0
-  let statutHeuresSup  = "N/A"
+  let heuresSupBrutes = 0
+  let statutHeuresSup = "N/A"
 
   // HS avant prise de service (arrivée anticipée)
   if (debutRef !== null && debut < debutRef) {
@@ -106,18 +110,19 @@ export function calculerHS(params: {
     statutHeuresSup  = "EN_ATTENTE"
   }
 
-  // Point de départ "normal" : début effectif de la plage rémunérée
+  // Heures dans la plage de shift
   const debutEffectif = debutRef !== null ? Math.max(debut, debutRef) : debut
-
-  let heuresTravaillees: number
+  let brut: number
   if (finRef !== null && fin > finRef) {
-    // HS après fin de shift
-    heuresTravaillees  = Math.max(0, finRef - debutEffectif) / 60
-    heuresSupBrutes   += (fin - finRef) / 60
-    statutHeuresSup    = "EN_ATTENTE"
+    brut             = Math.max(0, finRef - debutEffectif) / 60
+    heuresSupBrutes += (fin - finRef) / 60
+    statutHeuresSup  = "EN_ATTENTE"
   } else {
-    heuresTravaillees  = Math.max(0, fin - debutEffectif) / 60
+    brut = Math.max(0, fin - debutEffectif) / 60
   }
+
+  // Déduction pause + plafond journalier
+  const heuresTravaillees = Math.min(Math.max(0, brut - PAUSE_H), PLAFOND_H)
 
   return { heuresTravaillees, heuresSupBrutes, statutHeuresSup }
 }
