@@ -1,7 +1,5 @@
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export async function sendEmail({
   to,
   subject,
@@ -11,6 +9,9 @@ export async function sendEmail({
   subject: string
   html: string
 }) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error("RESEND_API_KEY non configurée")
+  const resend = new Resend(apiKey)
   const { data, error } = await resend.emails.send({
     from: "Mon RH <reporting@sanoviahc.com>",
     to: Array.isArray(to) ? to : [to],
