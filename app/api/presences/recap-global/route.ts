@@ -101,9 +101,14 @@ export async function GET(req: Request) {
     const totalHSValidees = presEmp
       .filter(p => p.statutHeuresSup === "VALIDEE")
       .reduce((s, p) => s + p.heuresSupBrutes, 0)
+    const totalHSRejetees = presEmp
+      .filter(p => p.statutHeuresSup === "REJETEE")
+      .reduce((s, p) => s + p.heuresSupBrutes, 0)
     const totalHSAttente  = presEmp
       .filter(p => p.statutHeuresSup === "EN_ATTENTE")
       .reduce((s, p) => s + p.heuresSupBrutes, 0)
+    const totalHSBrutes      = totalHSValidees + totalHSRejetees + totalHSAttente
+    const heuresEffectives   = totalHeures + totalHSValidees
 
     return {
       id: emp.id,
@@ -123,8 +128,11 @@ export async function GET(req: Request) {
       tauxPresence,
       totalMinRetard,
       totalHeures,
+      totalHSBrutes,
       totalHSValidees,
+      totalHSRejetees,
       totalHSAttente,
+      heuresEffectives,
     }
   })
 

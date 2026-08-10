@@ -882,7 +882,8 @@ export default function HorairesPage() {
         joursOuvres: number; joursAttendu: number; joursConge: number
         nbPresentsTotal: number; nbRetard: number; nbAbsent: number; nbConge: number; nbJourOff: number
         tauxPresence: number; totalMinRetard: number; totalHeures: number
-        totalHSValidees: number; totalHSAttente: number
+        totalHSBrutes: number; totalHSValidees: number; totalHSRejetees: number; totalHSAttente: number
+        heuresEffectives: number
       }[] } = await res.json()
 
       if (data.employes.length === 0) { toast.error("Aucun employé actif"); return }
@@ -933,6 +934,9 @@ export default function HorairesPage() {
         return h > 0 ? `${h}h${mn > 0 ? mn.toString().padStart(2, "0") : ""}` : `${mn}min`
       }
 
+      // Col indexes: 0=Employé 1=Poste 2=J.Att 3=Présents 4=Retards 5=Absences
+      //              6=Congés 7=J.Off 8=Taux% 9=Ret.min 10=H.trav 11=HS brutes
+      //              12=HS valid 13=HS rejet 14=H.effectives
       const rows = data.employes.map(e => [
         `${e.prenom} ${e.nom}`,
         e.poste,
@@ -945,30 +949,54 @@ export default function HorairesPage() {
         `${e.tauxPresence}%`,
         hm(e.totalMinRetard),
         `${e.totalHeures.toFixed(1)}h`,
-        `${e.totalHSValidees.toFixed(1)}h`,
+        e.totalHSBrutes > 0    ? `${e.totalHSBrutes.toFixed(1)}h`    : "—",
+        e.totalHSValidees > 0  ? `${e.totalHSValidees.toFixed(1)}h`  : "—",
+        e.totalHSRejetees > 0  ? `${e.totalHSRejetees.toFixed(1)}h`  : "—",
+        `${e.heuresEffectives.toFixed(1)}h`,
       ])
 
       // Ligne totaux
       const tot = data.employes.reduce((acc, e) => ({
-        joursAttendu:    acc.joursAttendu    + e.joursAttendu,
-        nbPresentsTotal: acc.nbPresentsTotal + e.nbPresentsTotal,
-        nbRetard:        acc.nbRetard        + e.nbRetard,
-        nbAbsent:        acc.nbAbsent        + e.nbAbsent,
-        nbConge:         acc.nbConge         + e.nbConge,
-        nbJourOff:       acc.nbJourOff       + e.nbJourOff,
-        totalMinRetard:  acc.totalMinRetard  + e.totalMinRetard,
-        totalHeures:     acc.totalHeures     + e.totalHeures,
-        totalHSValidees: acc.totalHSValidees + e.totalHSValidees,
-      }), { joursAttendu: 0, nbPresentsTotal: 0, nbRetard: 0, nbAbsent: 0, nbConge: 0, nbJourOff: 0, totalMinRetard: 0, totalHeures: 0, totalHSValidees: 0 })
+        joursAttendu:     acc.joursAttendu     + e.joursAttendu,
+        nbPresentsTotal:  acc.nbPresentsTotal  + e.nbPresentsTotal,
+        nbRetard:         acc.nbRetard         + e.nbRetard,
+        nbAbsent:         acc.nbAbsent         + e.nbAbsent,
+        nbConge:          acc.nbConge          + e.nbConge,
+        nbJourOff:        acc.nbJourOff        + e.nbJourOff,
+        totalMinRetard:   acc.totalMinRetard   + e.totalMinRetard,
+        totalHeures:      acc.totalHeures      + e.totalHeures,
+        totalHSBrutes:    acc.totalHSBrutes    + e.totalHSBrutes,
+        totalHSValidees:  acc.totalHSValidees  + e.totalHSValidees,
+        totalHSRejetees:  acc.totalHSRejetees  + e.totalHSRejetees,
+        heuresEffectives: acc.heuresEffectives + e.heuresEffectives,
+      }), { joursAttendu: 0, nbPresentsTotal: 0, nbRetard: 0, nbAbsent: 0, nbConge: 0, nbJourOff: 0, totalMinRetard: 0, totalHeures: 0, totalHSBrutes: 0, totalHSValidees: 0, totalHSRejetees: 0, heuresEffectives: 0 })
 
       const avgTaux = data.employes.length > 0
         ? Math.round(data.employes.reduce((s, e) => s + e.tauxPresence, 0) / data.employes.length)
         : 0
 
+      // Deux lignes d'en-tête pour grouper les colonnes HS
       autoTable(doc, {
         startY: 46,
         margin: { left: m, right: m, bottom: FOOT_H + 4 },
-        head: [["Employé", "Poste", "J. Att.", "Présents", "Retards", "Absences", "Congés", "J. Off", "Taux %", "Cumul ret.", "H. trav.", "HS val."]],
+        head: [
+          [
+            { content: "Employé",    rowSpan: 2 },
+            { content: "Poste",      rowSpan: 2 },
+            { content: "J. Att.",    rowSpan: 2 },
+            { content: "Présents",   rowSpan: 2 },
+            { content: "Retards",    rowSpan: 2 },
+            { content: "Absences",   rowSpan: 2 },
+            { content: "Congés",     rowSpan: 2 },
+            { content: "J. Off",     rowSpan: 2 },
+            { content: "Taux %",     rowSpan: 2 },
+            { content: "Ret. cumulé",rowSpan: 2 },
+            { content: "H. trav.",   rowSpan: 2 },
+            { content: "Heures supplémentaires", colSpan: 3 },
+            { content: "H. effectives à payer", rowSpan: 2 },
+          ],
+          ["HS brutes", "HS validées", "HS rejetées"],
+        ],
         body: rows,
         foot: [[
           "TOTAUX", "",
@@ -976,31 +1004,38 @@ export default function HorairesPage() {
           String(tot.nbRetard), String(tot.nbAbsent),
           String(tot.nbConge), String(tot.nbJourOff),
           `${avgTaux}% moy.`, hm(tot.totalMinRetard),
-          `${tot.totalHeures.toFixed(1)}h`, `${tot.totalHSValidees.toFixed(1)}h`,
+          `${tot.totalHeures.toFixed(1)}h`,
+          tot.totalHSBrutes > 0   ? `${tot.totalHSBrutes.toFixed(1)}h`   : "—",
+          tot.totalHSValidees > 0 ? `${tot.totalHSValidees.toFixed(1)}h` : "—",
+          tot.totalHSRejetees > 0 ? `${tot.totalHSRejetees.toFixed(1)}h` : "—",
+          `${tot.heuresEffectives.toFixed(1)}h`,
         ]],
         headStyles: {
           fillColor: NAVY, textColor: [255, 255, 255],
-          fontStyle: "bold", fontSize: 8, cellPadding: 2.5, halign: "center",
+          fontStyle: "bold", fontSize: 7.5, cellPadding: 2, halign: "center",
         },
-        bodyStyles: { fontSize: 7.5, textColor: SLATE, cellPadding: 2 },
+        bodyStyles: { fontSize: 7, textColor: SLATE, cellPadding: 1.8 },
         footStyles: {
           fillColor: [240, 244, 248], textColor: NAVY,
-          fontStyle: "bold", fontSize: 8, cellPadding: 2.5,
+          fontStyle: "bold", fontSize: 7.5, cellPadding: 2,
         },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
-          0: { cellWidth: 38, fontStyle: "bold" },
-          1: { cellWidth: 32 },
-          2: { cellWidth: 15, halign: "center" },
-          3: { cellWidth: 17, halign: "center" },
-          4: { cellWidth: 14, halign: "center" },
-          5: { cellWidth: 17, halign: "center" },
-          6: { cellWidth: 14, halign: "center" },
-          7: { cellWidth: 13, halign: "center" },
-          8: { cellWidth: 15, halign: "center" },
-          9: { cellWidth: 18, halign: "center" },
-          10: { cellWidth: 17, halign: "center" },
-          11: { cellWidth: 17, halign: "center" },
+          0:  { cellWidth: 34, fontStyle: "bold" },
+          1:  { cellWidth: 28 },
+          2:  { cellWidth: 12, halign: "center" },
+          3:  { cellWidth: 14, halign: "center" },
+          4:  { cellWidth: 13, halign: "center" },
+          5:  { cellWidth: 14, halign: "center" },
+          6:  { cellWidth: 12, halign: "center" },
+          7:  { cellWidth: 11, halign: "center" },
+          8:  { cellWidth: 13, halign: "center" },
+          9:  { cellWidth: 16, halign: "center" },
+          10: { cellWidth: 15, halign: "center" },
+          11: { cellWidth: 16, halign: "center" },
+          12: { cellWidth: 16, halign: "center" },
+          13: { cellWidth: 16, halign: "center" },
+          14: { cellWidth: 22, halign: "center", fontStyle: "bold" },
         },
         didParseCell: (d) => {
           if (d.section !== "body") return
@@ -1014,7 +1049,9 @@ export default function HorairesPage() {
             d.cell.styles.fontStyle = "bold"
           }
           if (d.column.index === 9 && e.totalMinRetard > 0) d.cell.styles.textColor = AMBER
-          if (d.column.index === 11 && e.totalHSValidees > 0) d.cell.styles.textColor = BLUE
+          if (d.column.index === 12 && e.totalHSValidees > 0)  d.cell.styles.textColor = LGREEN
+          if (d.column.index === 13 && e.totalHSRejetees > 0)  d.cell.styles.textColor = [...RED] as [number,number,number]
+          if (d.column.index === 14) { d.cell.styles.textColor = BLUE; d.cell.styles.fontStyle = "bold" }
         },
       })
 
