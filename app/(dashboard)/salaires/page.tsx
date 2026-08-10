@@ -655,16 +655,18 @@ export default function SalairesPage() {
             </div>
             {previewCalc && (
               <div className="col-span-full rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs space-y-1">
-                <p className="font-semibold text-blue-800 mb-2 text-sm">Simulation — Droit camerounais (CNPS · IRPP · CAC · RAV)</p>
+                <p className="font-semibold text-blue-800 mb-2 text-sm">Simulation — Droit camerounais (CNPS · CCF · TDL · IRPP · CAC · RAV)</p>
                 {([
                   { label: "Salaire brut imposable", val: previewCalc.brutImposable, cls: "text-slate-800 font-medium" },
                   ...(previewHS > 0 ? [{ label: `Heures sup. (${form.heuresSupplementaires}h × taux ${form.tauxHS})`, val: previewHS, cls: "text-emerald-700" }] : []),
-                  { label: `CNPS salarié 4.2% (plaf. ${CAMEROUN.CNPS_PLAFOND_MENSUEL.toLocaleString("fr-FR")} FCFA)`, val: -previewCalc.cnpsSalarie, cls: "text-red-700" },
+                  { label: `CNPS salarié 4,2% (plaf. ${CAMEROUN.CNPS_PLAFOND_MENSUEL.toLocaleString("fr-FR")} FCFA)`, val: -previewCalc.cnpsSalarie, cls: "text-red-700" },
+                  { label: "CCF salarial 1,0%", val: -previewCalc.ccfSalarie, cls: "text-red-700" },
                   { label: "Revenu net imposable", val: previewCalc.revenuNetImposable, cls: "text-slate-500 italic" },
-                  { label: `Abattement forfaitaire (30%, plaf. 25 000)`, val: -previewCalc.abattement, cls: "text-red-700" },
+                  { label: "Abattement forfaitaire (30%, plaf. 25 000)", val: -previewCalc.abattement, cls: "text-red-700" },
                   { label: "IRPP (progressif)", val: -previewCalc.irpp, cls: "text-red-700" },
                   { label: "CAC (10% de l'IRPP)", val: -previewCalc.cac, cls: "text-red-700" },
-                  { label: "RAV (forfait mensuel)", val: -previewCalc.rav, cls: "text-red-700" },
+                  { label: "RAV (barème Annexe V)", val: -previewCalc.rav, cls: "text-red-700" },
+                  { label: "TDL (barème Annexe VI)", val: -previewCalc.tdl, cls: "text-red-700" },
                   ...(previewRetenueAbsence > 0 ? [{ label: `Absences (${form.joursAbsence}j × base/26)`, val: -previewRetenueAbsence, cls: "text-red-700" }] : []),
                   ...(previewRetenueRetard > 0 ? [{ label: `Retards (${form.minutesRetardTotal} min)`, val: -previewRetenueRetard, cls: "text-red-700" }] : []),
                   ...((parseFloat(form.retenues || "0") || 0) > 0 ? [{ label: "Autres retenues", val: -(parseFloat(form.retenues || "0") || 0), cls: "text-red-700" }] : []),
@@ -679,7 +681,8 @@ export default function SalairesPage() {
                   <span className="tabular-nums">{formatFCFA(previewCalc.netAPayer)}</span>
                 </div>
                 <div className="border-t border-blue-100 pt-1 mt-1 text-slate-500 space-y-0.5">
-                  <div className="flex justify-between"><span>Charges patronales CNPS (13.2%)</span><span className="tabular-nums">{previewCalc.cnpsPatronal.toLocaleString("fr-FR")} FCFA</span></div>
+                  <div className="flex justify-between"><span>CNPS patronal 12,95% → {previewCalc.cnpsPatronal.toLocaleString("fr-FR")} FCFA</span><span></span></div>
+                  <div className="flex justify-between"><span>CCF patronal 1,5% → {previewCalc.ccfPatronal.toLocaleString("fr-FR")} FCFA &nbsp;|&nbsp; FNE 1% → {previewCalc.fne.toLocaleString("fr-FR")} FCFA</span><span></span></div>
                   <div className="flex justify-between text-slate-700 font-medium"><span>Coût total employeur</span><span className="tabular-nums">{previewCalc.coutTotal.toLocaleString("fr-FR")} FCFA</span></div>
                 </div>
               </div>

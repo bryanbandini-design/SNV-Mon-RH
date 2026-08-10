@@ -196,15 +196,15 @@ export default function ParametresPage() {
             </div>
           </div>
 
-          {/* CNPS patronal */}
+          {/* Charges patronales */}
           <div>
-            <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-2">CNPS — Charges patronales</p>
+            <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-2">Charges patronales</p>
             <div className="bg-white rounded-lg border border-emerald-100 divide-y divide-slate-100 text-sm">
               {[
-                { label: "Vieillesse patronal", taux: `${(CAMEROUN.CNPS_VIEILLESSE_PAT * 100).toFixed(1)} %` },
-                { label: "Allocations familiales", taux: `${(CAMEROUN.CNPS_ALLOC_FAM_PAT * 100).toFixed(1)} %` },
-                { label: "Accidents du Travail / Maladies Professionnelles", taux: `${(CAMEROUN.CNPS_AT_MP_PAT * 100).toFixed(1)} %` },
-                { label: "TOTAL charges patronales CNPS", taux: `${((CAMEROUN.CNPS_VIEILLESSE_PAT + CAMEROUN.CNPS_ALLOC_FAM_PAT + CAMEROUN.CNPS_AT_MP_PAT) * 100).toFixed(1)} %` },
+                { label: "CNPS patronal (taux global)", taux: `${(CAMEROUN.CNPS_PATRONAL_TOTAL * 100).toFixed(2)} %` },
+                { label: "CCF — Contribution au Crédit Foncier (patronal)", taux: `${(CAMEROUN.CCF_PATRONAL * 100).toFixed(1)} %` },
+                { label: "FNE — Fonds National de l'Emploi (patronal)", taux: `${(CAMEROUN.FNE_PATRONAL * 100).toFixed(1)} %` },
+                { label: "TOTAL charges patronales", taux: `${((CAMEROUN.CNPS_PATRONAL_TOTAL + CAMEROUN.CCF_PATRONAL + CAMEROUN.FNE_PATRONAL) * 100).toFixed(2)} %` },
               ].map(r => (
                 <div key={r.label} className={`flex justify-between px-4 py-2.5 ${r.label.startsWith("TOTAL") ? "bg-emerald-50 font-semibold" : ""}`}>
                   <span className="text-slate-600">{r.label}</span>
@@ -242,7 +242,9 @@ export default function ParametresPage() {
             <div className="bg-white rounded-lg border border-emerald-100 divide-y divide-slate-100 text-sm">
               {[
                 { label: "CAC — Centimes Additionnels Communaux (% de l'IRPP)", taux: `${(CAMEROUN.CAC_TAUX * 100).toFixed(0)} %` },
-                { label: "RAV — Redevance Audiovisuelle (forfait mensuel)", taux: `${CAMEROUN.RAV_MENSUEL.toLocaleString("fr-FR")} FCFA` },
+                { label: "CCF — Contribution au Crédit Foncier (salarial)", taux: `${(CAMEROUN.CCF_SALARIAL * 100).toFixed(1)} %` },
+                { label: "RAV — Redevance Audiovisuelle (barème Annexe V)", taux: "Barème" },
+                { label: "TDL — Taxe de Développement Local (barème Annexe VI)", taux: "Barème/12" },
                 { label: "SMIG en vigueur", taux: `${CAMEROUN.SMIG.toLocaleString("fr-FR")} FCFA/mois` },
               ].map(r => (
                 <div key={r.label} className="flex justify-between px-4 py-2.5">

@@ -113,7 +113,7 @@ async function genererPDF(detail: DeclarationDetail) {
   doc.text("CAISSE NATIONALE DE PRÉVOYANCE SOCIALE (CNPS)", ML + 3, y + 4.3)
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...WHITE)
   doc.text(
-    `Salarié 4,20 %   |   Patronal 13,20 %   |   Plafond : ${pn(CAMEROUN.CNPS_PLAFOND_MENSUEL)} FCFA/mois`,
+    `Salarié 4,20 %   |   Patronal 12,95 %   |   Plafond : ${pn(CAMEROUN.CNPS_PLAFOND_MENSUEL)} FCFA/mois`,
     W - MR - 2, y + 4.3, { align: "right" }
   )
 
@@ -132,7 +132,7 @@ async function genererPDF(detail: DeclarationDetail) {
 
   autoTable(doc, {
     startY: y + 7,
-    head: [["Matricule", "Nom & Prénom", "Poste", "Brut plafonné\n(FCFA)", "CNPS salarié\n4,20 %", "CNPS patronal\n13,20 %", "Total CNPS\n(FCFA)"]],
+    head: [["Matricule", "Nom & Prénom", "Poste", "Brut plafonné\n(FCFA)", "CNPS salarié\n4,20 %", "CNPS patronal\n12,95 %", "Total CNPS\n(FCFA)"]],
     body: cnpsRows,
     foot: [[
       { content: "TOTAL", colSpan: 3, styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE } },
@@ -179,7 +179,7 @@ async function genererPDF(detail: DeclarationDetail) {
   doc.text("IMPÔTS SUR LE REVENU — IRPP · CAC · RAV", ML + 3, y + 4.3)
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...WHITE)
   doc.text(
-    "Barème progressif Cameroun   |   CAC = 10 % de l'IRPP   |   RAV forfait mensuel",
+    "Barème progressif Cameroun   |   CAC = 10 % de l'IRPP   |   RAV + TDL (barèmes) + CCF 1 %",
     W - MR - 2, y + 4.3, { align: "right" }
   )
 
@@ -401,7 +401,7 @@ export default function DeclarationsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         {[
           { label: "CNPS à verser",    value: formatCurrency(totalCNPS),   icon: Building2,        color: "#1a3461", bg: "#eef2ff", sub: "salarié + patronal" },
-          { label: "Impôts à verser",  value: formatCurrency(totalImpots), icon: Scale,            color: "#1e5bb8", bg: "#eff6ff", sub: "IRPP + CAC + RAV" },
+          { label: "Impôts à verser",  value: formatCurrency(totalImpots), icon: Scale,            color: "#1e5bb8", bg: "#eff6ff", sub: "IRPP + CAC + RAV + TDL + CCF" },
           { label: "Total à verser",   value: formatCurrency(totalGlobal), icon: CircleDollarSign, color: "#059669", bg: "#ecfdf5", sub: "déclarations en cours" },
           { label: "En arriéré",       value: String(nbArriers),           icon: AlertCircle,      color: "#dc2626", bg: "#fef2f2", sub: nbArriers > 0 ? "délai légal dépassé" : "aucun arriéré" },
         ].map(c => (
@@ -615,7 +615,7 @@ export default function DeclarationsPage() {
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="bg-[#1a3461] text-white">
-                                {["Matricule","Nom & Prénom","Poste","Brut plafonné","CNPS salarié\n4,20 %","CNPS patronal\n13,20 %","Total CNPS"].map(h => (
+                                {["Matricule","Nom & Prénom","Poste","Brut plafonné","CNPS salarié\n4,20 %","CNPS patronal\n12,95 %","Total CNPS"].map(h => (
                                   <th key={h} className="px-3 py-2 text-left font-semibold whitespace-pre-line">{h}</th>
                                 ))}
                               </tr>

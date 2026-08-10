@@ -53,7 +53,7 @@ export default function ModifierEmployePage() {
         dateDebutEssai: emp.dateDebutEssai  ? emp.dateDebutEssai.split("T")[0] : "",
         dateFinEssai:   emp.dateFinEssai    ? emp.dateFinEssai.split("T")[0]   : "",
         notes:          emp.notes           ?? "",
-        jourRepos:      emp.jourRepos       ?? "",
+        jourRepos:      emp.jourRepos       || "CINQ_JOURS",
       })
       setPeriodeEssai(emp.periodeEssai ?? false)
       if (Array.isArray(allEmps)) setEmployes(allEmps.filter((e: { id: string }) => e.id !== id))
@@ -68,7 +68,7 @@ export default function ModifierEmployePage() {
     const res = await fetch(`/api/employes/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, periodeEssai }),
+      body: JSON.stringify({ ...form, periodeEssai, jourRepos: form.jourRepos === "CINQ_JOURS" ? "" : form.jourRepos }),
     })
     setSaving(false)
     if (res.ok) {
@@ -166,7 +166,7 @@ export default function ModifierEmployePage() {
                 <SelectContent>
                   <SelectItem value="DIMANCHE">Dimanche (travail lun–sam)</SelectItem>
                   <SelectItem value="SAMEDI">Samedi (travail lun–ven + dim)</SelectItem>
-                  <SelectItem value="">Semaine 5 jours (lun–ven)</SelectItem>
+                  <SelectItem value="CINQ_JOURS">Semaine 5 jours (lun–ven)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

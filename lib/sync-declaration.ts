@@ -18,7 +18,9 @@ export async function syncDeclarationPeriode(mois: number, annee: number) {
   const totalIRPP         = salaires.reduce((s, r) => s + r.irpp, 0)
   const totalCAC          = salaires.reduce((s, r) => s + r.cac, 0)
   const totalRAV          = salaires.reduce((s, r) => s + r.rav, 0)
-  const totalImpots       = totalIRPP + totalCAC + totalRAV
+  const totalTDL          = salaires.reduce((s, r) => s + (r.tdl ?? 0), 0)
+  const totalCCFSalarie   = salaires.reduce((s, r) => s + (r.ccfSalarie ?? 0), 0)
+  const totalImpots       = totalIRPP + totalCAC + totalRAV + totalTDL + totalCCFSalarie
   const totalAVerser      = totalCNPS + totalImpots
   const nbSalaries        = salaires.length  // exclut les prestataires
 

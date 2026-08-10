@@ -9,9 +9,9 @@ import {
   Clock, Plus, Shuffle, Settings, ClipboardList, Loader2,
   AlertCircle, Trash2, CalendarDays, ChevronLeft, ChevronRight, Download,
   Pencil, Check, X, Users, UserCheck, Crown, Info, PenLine, ShieldCheck,
-  ShieldX, Zap, Timer,
+  ShieldX, Zap, Timer, FileText,
 } from "lucide-react"
-import { minutesEnHeure, heureEnMinutes } from "@/lib/utils"
+import { minutesEnHeure, heureEnMinutes, MOIS } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 
 type Employe     = { id: string; prenom: string; nom: string; poste: string; matricule: string; typeContrat?: string | null; roleOrg?: string | null; userRole?: string | null }
@@ -204,6 +204,11 @@ export default function HorairesPage() {
   const [savingManuel, setSavingManuel] = useState(false)
   const [editingManuelId, setEditingManuelId] = useState<string | null>(null)
   const formManuelRef = useRef<HTMLDivElement>(null)
+
+  // ── Récap global mensuel ────────────────────────────────────────────────────
+  const [recapMois,    setRecapMois]    = useState(new Date().getMonth() + 1)
+  const [recapAnnee,   setRecapAnnee]   = useState(new Date().getFullYear())
+  const [recapLoading, setRecapLoading] = useState(false)
 
   // ── Composition équipes ──────────────────────────────────────────────────────
   const [equipesPeriode, setEquipesPeriode] = useState(() => {
@@ -866,6 +871,175 @@ export default function HorairesPage() {
     toast.success("Planning téléchargé")
   }
 
+  // ── PDF récap global mensuel ──────────────────────────────────────────────────
+  async function downloadRecapGlobalPDF() {
+    setRecapLoading(true)
+    try {
+      const res = await fetch(`/api/presences/recap-global?mois=${recapMois}&annee=${recapAnnee}`)
+      if (!res.ok) { toast.error("Impossible de charger les données"); return }
+      const data: { mois: number; annee: number; employes: {
+        id: string; prenom: string; nom: string; matricule: string; poste: string; departement: string | null
+        joursOuvres: number; joursAttendu: number; joursConge: number
+        nbPresentsTotal: number; nbRetard: number; nbAbsent: number; nbConge: number; nbJourOff: number
+        tauxPresence: number; totalMinRetard: number; totalHeures: number
+        totalHSValidees: number; totalHSAttente: number
+      }[] } = await res.json()
+
+      if (data.employes.length === 0) { toast.error("Aucun employé actif"); return }
+
+      const { jsPDF }     = await import("jspdf")
+      const autoTable     = (await import("jspdf-autotable")).default
+      const doc           = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+      const W = 297, H = 210, m = 12
+      const FOOT_H = 18
+
+      const NAVY  : [number,number,number] = [26,  52,  97]
+      const GREEN : [number,number,number] = [122, 179,  46]
+      const GREY  : [number,number,number] = [100, 116, 139]
+      const SLATE : [number,number,number] = [71,  85,  105]
+      const LGREEN: [number,number,number] = [5,   150, 105]
+      const AMBER : [number,number,number] = [217, 119,   6]
+      const RED   : [number,number,number] = [220,  38,  38]
+      const BLUE  : [number,number,number] = [30,  139, 192]
+
+      // Logo
+      try {
+        const blob = await fetch("/logo-sanovia.png").then(r => r.blob())
+        const b64: string = await new Promise((res, rej) => {
+          const rd = new FileReader(); rd.onload = () => res(rd.result as string); rd.onerror = rej; rd.readAsDataURL(blob)
+        })
+        doc.addImage(b64, "PNG", m, 6, 50, 12.5)
+      } catch {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY)
+        doc.text("SANOVIA HEALTH CARE", m, 14)
+      }
+
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...GREY)
+      doc.text(`Imprimé le ${new Date().toLocaleDateString("fr-FR")}`, W - m, 9, { align: "right" })
+      doc.text("Document confidentiel", W - m, 14, { align: "right" })
+
+      doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.line(0, 23, W, 23)
+
+      doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...NAVY)
+      doc.text("RÉCAPITULATIF HORAIRES MENSUEL", m, 31)
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GREY)
+      doc.text(`${MOIS[data.mois - 1]} ${data.annee}  —  ${data.employes.length} employé(s)`, m, 38)
+
+      doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3); doc.line(m, 42, W - m, 42)
+
+      function hm(min: number): string {
+        if (min === 0) return "—"
+        const h = Math.floor(min / 60), mn = min % 60
+        return h > 0 ? `${h}h${mn > 0 ? mn.toString().padStart(2, "0") : ""}` : `${mn}min`
+      }
+
+      const rows = data.employes.map(e => [
+        `${e.prenom} ${e.nom}`,
+        e.poste,
+        String(e.joursAttendu),
+        String(e.nbPresentsTotal),
+        String(e.nbRetard),
+        String(e.nbAbsent),
+        String(e.nbConge),
+        String(e.nbJourOff),
+        `${e.tauxPresence}%`,
+        hm(e.totalMinRetard),
+        `${e.totalHeures.toFixed(1)}h`,
+        `${e.totalHSValidees.toFixed(1)}h`,
+      ])
+
+      // Ligne totaux
+      const tot = data.employes.reduce((acc, e) => ({
+        joursAttendu:    acc.joursAttendu    + e.joursAttendu,
+        nbPresentsTotal: acc.nbPresentsTotal + e.nbPresentsTotal,
+        nbRetard:        acc.nbRetard        + e.nbRetard,
+        nbAbsent:        acc.nbAbsent        + e.nbAbsent,
+        nbConge:         acc.nbConge         + e.nbConge,
+        nbJourOff:       acc.nbJourOff       + e.nbJourOff,
+        totalMinRetard:  acc.totalMinRetard  + e.totalMinRetard,
+        totalHeures:     acc.totalHeures     + e.totalHeures,
+        totalHSValidees: acc.totalHSValidees + e.totalHSValidees,
+      }), { joursAttendu: 0, nbPresentsTotal: 0, nbRetard: 0, nbAbsent: 0, nbConge: 0, nbJourOff: 0, totalMinRetard: 0, totalHeures: 0, totalHSValidees: 0 })
+
+      const avgTaux = data.employes.length > 0
+        ? Math.round(data.employes.reduce((s, e) => s + e.tauxPresence, 0) / data.employes.length)
+        : 0
+
+      autoTable(doc, {
+        startY: 46,
+        margin: { left: m, right: m, bottom: FOOT_H + 4 },
+        head: [["Employé", "Poste", "J. Att.", "Présents", "Retards", "Absences", "Congés", "J. Off", "Taux %", "Cumul ret.", "H. trav.", "HS val."]],
+        body: rows,
+        foot: [[
+          "TOTAUX", "",
+          String(tot.joursAttendu), String(tot.nbPresentsTotal),
+          String(tot.nbRetard), String(tot.nbAbsent),
+          String(tot.nbConge), String(tot.nbJourOff),
+          `${avgTaux}% moy.`, hm(tot.totalMinRetard),
+          `${tot.totalHeures.toFixed(1)}h`, `${tot.totalHSValidees.toFixed(1)}h`,
+        ]],
+        headStyles: {
+          fillColor: NAVY, textColor: [255, 255, 255],
+          fontStyle: "bold", fontSize: 8, cellPadding: 2.5, halign: "center",
+        },
+        bodyStyles: { fontSize: 7.5, textColor: SLATE, cellPadding: 2 },
+        footStyles: {
+          fillColor: [240, 244, 248], textColor: NAVY,
+          fontStyle: "bold", fontSize: 8, cellPadding: 2.5,
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 38, fontStyle: "bold" },
+          1: { cellWidth: 32 },
+          2: { cellWidth: 15, halign: "center" },
+          3: { cellWidth: 17, halign: "center" },
+          4: { cellWidth: 14, halign: "center" },
+          5: { cellWidth: 17, halign: "center" },
+          6: { cellWidth: 14, halign: "center" },
+          7: { cellWidth: 13, halign: "center" },
+          8: { cellWidth: 15, halign: "center" },
+          9: { cellWidth: 18, halign: "center" },
+          10: { cellWidth: 17, halign: "center" },
+          11: { cellWidth: 17, halign: "center" },
+        },
+        didParseCell: (d) => {
+          if (d.section !== "body") return
+          const e = data.employes[d.row.index]
+          if (!e) return
+          if (d.column.index === 3) d.cell.styles.textColor = LGREEN
+          if (d.column.index === 4 && e.nbRetard > 0) d.cell.styles.textColor = AMBER
+          if (d.column.index === 5 && e.nbAbsent > 0) d.cell.styles.textColor = [...RED] as [number,number,number]
+          if (d.column.index === 8) {
+            d.cell.styles.textColor = e.tauxPresence >= 90 ? LGREEN : e.tauxPresence >= 75 ? AMBER : RED
+            d.cell.styles.fontStyle = "bold"
+          }
+          if (d.column.index === 9 && e.totalMinRetard > 0) d.cell.styles.textColor = AMBER
+          if (d.column.index === 11 && e.totalHSValidees > 0) d.cell.styles.textColor = BLUE
+        },
+      })
+
+      // Pied de page
+      const totalPages = doc.getNumberOfPages()
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i)
+        doc.setFillColor(...NAVY); doc.rect(0, H - FOOT_H, W, FOOT_H, "F")
+        doc.setFillColor(...GREEN); doc.rect(0, H - FOOT_H, W, 0.8, "F")
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255)
+        doc.text("SANOVIA Health Care", W / 2, H - FOOT_H + 6, { align: "center" })
+        doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(147, 197, 253)
+        doc.text("Tél : 656 67 67 67 — 670 44 55 68   |   shcdg@sanoviahc.com   |   Société à responsabilité limitée", W / 2, H - FOOT_H + 11, { align: "center" })
+        doc.text("NUI : M0925180497774J   /   RCCM : CM-NSI-02-2025-B12-00707", W / 2, H - FOOT_H + 15.5, { align: "center" })
+        doc.setFontSize(7); doc.setTextColor(200, 220, 255)
+        doc.text(`Page ${i} / ${totalPages}`, W - m, H - FOOT_H + 11, { align: "right" })
+      }
+
+      doc.save(`Recap_Horaires_${MOIS[data.mois - 1]}_${data.annee}.pdf`)
+      toast.success("Récapitulatif téléchargé")
+    } finally {
+      setRecapLoading(false)
+    }
+  }
+
   // Salariés uniquement (pas de prestataires dans les équipes)
   const salaries = employes.filter(e => e.typeContrat !== "PRESTATAIRE")
 
@@ -1115,6 +1289,50 @@ export default function HorairesPage() {
               </table>
               </div>
             )}
+          </div>
+
+          {/* ── Récapitulatif global mensuel ──────────────────────────────────── */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+              style={{ background: "linear-gradient(135deg, #1a3461 0%, #7ab32e 100%)" }}>
+              <FileText className="h-5 w-5 text-white/90" />
+              <div>
+                <p className="text-sm font-semibold text-white">Récapitulatif global mensuel</p>
+                <p className="text-xs text-white/70">Totaux horaires de tout le personnel pour un mois donné</p>
+              </div>
+            </div>
+            <div className="p-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
+              <div className="flex items-center gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-500">Mois</Label>
+                  <select
+                    value={recapMois}
+                    onChange={e => setRecapMois(Number(e.target.value))}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#7ab32e]/40">
+                    {MOIS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-500">Année</Label>
+                  <select
+                    value={recapAnnee}
+                    onChange={e => setRecapAnnee(Number(e.target.value))}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#7ab32e]/40">
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={downloadRecapGlobalPDF}
+                disabled={recapLoading}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed transition-opacity"
+                style={{ background: "linear-gradient(135deg, #1a3461, #7ab32e)" }}>
+                <Download className="h-4 w-4" />
+                {recapLoading ? "Génération…" : "Télécharger le récap PDF"}
+              </button>
+            </div>
           </div>
         </div>
       )}

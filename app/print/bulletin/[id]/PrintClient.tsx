@@ -180,8 +180,17 @@ export default function PrintClient(props: Props) {
         { content: n(calc.cac), styles: { halign: "right", textColor: RGB.red } },
       ])
       rows.push([
-        "3004", "RAV — Redevance Audiovisuelle", "", "Forfait", "",
+        "3004", "CCF — Crédit Foncier (salarial)",
+        { content: n(calc.brutImposable), styles: { halign: "right" } }, "1,00 %", "",
+        { content: n(calc.ccfSalarie), styles: { halign: "right", textColor: RGB.red } },
+      ])
+      rows.push([
+        "3005", "RAV — Redevance Audiovisuelle", "", "Barème", "",
         { content: n(calc.rav), styles: { halign: "right", textColor: RGB.red } },
+      ])
+      rows.push([
+        "3006", "TDL — Taxe de Développement Local", "", "Barème", "",
+        { content: n(calc.tdl), styles: { halign: "right", textColor: RGB.red } },
       ])
       if ((avanceDeduite ?? 0) > 0) rows.push([
         "3010", "Avance sur salaire déduite", "", "", "",
@@ -230,13 +239,13 @@ export default function PrintClient(props: Props) {
       // Charges patronales
       const yPat = yNet + 20
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...RGB.slate)
-      doc.text("CHARGES PATRONALES — informatif (non déduites du salaire)", m, yPat)
+      doc.text("CHARGES PATRONALES — informatif (non deduites du salaire)", m, yPat)
       doc.setFont("helvetica", "normal"); doc.setTextColor(...RGB.muted)
       const patRow = [
-        `Vieillesse 3,70 % -> ${n(Math.round(baseCNPS * CAMEROUN.CNPS_VIEILLESSE_PAT))} FCFA`,
-        `Alloc. Familiales 7,00 % -> ${n(Math.round(baseCNPS * CAMEROUN.CNPS_ALLOC_FAM_PAT))} FCFA`,
-        `AT/MP 2,50 % -> ${n(Math.round(baseCNPS * CAMEROUN.CNPS_AT_MP_PAT))} FCFA`,
-        `Total 13,20 % -> ${n(calc.cnpsPatronal)} FCFA`,
+        `CNPS patronal 12,95 % -> ${n(calc.cnpsPatronal)} FCFA`,
+        `CCF patronal 1,50 % -> ${n(calc.ccfPatronal)} FCFA`,
+        `FNE 1,00 % -> ${n(calc.fne)} FCFA`,
+        `Total patronal -> ${n(calc.cnpsPatronal + calc.ccfPatronal + calc.fne)} FCFA`,
         `Cout total employeur -> ${n(calc.coutTotal)} FCFA`,
       ].join("   |   ")
       doc.text(patRow, m, yPat + 5, { maxWidth: pageW - m * 2 })
@@ -655,11 +664,27 @@ export default function PrintClient(props: Props) {
                 </tr>
                 <tr>
                   <td className="code">3004</td>
+                  <td>CCF — Contribution au Crédit Foncier (salarial)</td>
+                  <td className="r">{n(calc.brutImposable)}</td>
+                  <td style={{ textAlign:"center" }}>1,00 %</td>
+                  <td></td>
+                  <td className="r ret">{n(calc.ccfSalarie)}</td>
+                </tr>
+                <tr>
+                  <td className="code">3005</td>
                   <td>RAV — Redevance Audiovisuelle</td>
                   <td></td>
-                  <td style={{ textAlign:"center", fontSize:"7.5px" }}>Forfait</td>
+                  <td style={{ textAlign:"center", fontSize:"7.5px" }}>Barème</td>
                   <td></td>
                   <td className="r ret">{n(calc.rav)}</td>
+                </tr>
+                <tr>
+                  <td className="code">3006</td>
+                  <td>TDL — Taxe de Développement Local</td>
+                  <td></td>
+                  <td style={{ textAlign:"center", fontSize:"7.5px" }}>Barème</td>
+                  <td></td>
+                  <td className="r ret">{n(calc.tdl)}</td>
                 </tr>
                 {(avanceDeduite ?? 0) > 0 && (
                   <tr>
@@ -672,7 +697,7 @@ export default function PrintClient(props: Props) {
                 )}
                 {retenues > 0 && (
                   <tr>
-                    <td className="code">3005</td>
+                    <td className="code">3009</td>
                     <td>Autres retenues (avances, absences, divers…)</td>
                     <td></td><td></td><td></td>
                     <td className="r ret">{n(retenues)}</td>
@@ -697,12 +722,12 @@ export default function PrintClient(props: Props) {
 
           {/* Charges patronales */}
           <div className="charges-bloc">
-            <div className="charges-title">Charges patronales CNPS — informatif (non déduites du salaire)</div>
+            <div className="charges-title">Charges patronales — informatif (non déduites du salaire)</div>
             <div>
-              Vieillesse patronal 3,70 % → <strong>{n(Math.round(baseCNPS * CAMEROUN.CNPS_VIEILLESSE_PAT))}</strong> FCFA &nbsp;|&nbsp;
-              Allocations familiales 7,00 % → <strong>{n(Math.round(baseCNPS * CAMEROUN.CNPS_ALLOC_FAM_PAT))}</strong> FCFA &nbsp;|&nbsp;
-              AT / MP 2,50 % → <strong>{n(Math.round(baseCNPS * CAMEROUN.CNPS_AT_MP_PAT))}</strong> FCFA &nbsp;|&nbsp;
-              <strong>Total patronal 13,20 % → {n(calc.cnpsPatronal)} FCFA</strong>
+              CNPS patronal 12,95 % → <strong>{n(calc.cnpsPatronal)}</strong> FCFA &nbsp;|&nbsp;
+              CCF patronal 1,50 % → <strong>{n(calc.ccfPatronal)}</strong> FCFA &nbsp;|&nbsp;
+              FNE 1,00 % → <strong>{n(calc.fne)}</strong> FCFA &nbsp;|&nbsp;
+              <strong>Total patronal → {n(calc.cnpsPatronal + calc.ccfPatronal + calc.fne)} FCFA</strong>
             </div>
             <div style={{ marginTop:"1mm" }}>
               Coût total employeur : <strong>{n(calc.coutTotal)} FCFA</strong>

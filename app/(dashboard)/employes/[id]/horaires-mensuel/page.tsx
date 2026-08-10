@@ -218,30 +218,42 @@ export default function HorairesMensuelPage() {
     doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3); doc.line(m, 51, W - m, 51)
 
     // ── Score ponctualité ────────────────────────────────────────────────────
+    const SCORE_TOP = 54, SCORE_H = 20
     doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3)
-    doc.roundedRect(m, 55, W - 2 * m, 24, 3, 3, "FD")
-    doc.setFillColor(...scRgb); doc.roundedRect(m, 55, 3, 24, 1, 1, "F")
+    doc.roundedRect(m, SCORE_TOP, W - 2 * m, SCORE_H, 3, 3, "FD")
+    doc.setFillColor(...scRgb); doc.roundedRect(m, SCORE_TOP, 3, SCORE_H, 1, 1, "F")
 
-    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(...GREY)
-    doc.text("SCORE PONCTUALITÉ & ASSIDUITÉ", m + 7, 62)
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...GREY)
+    doc.text("SCORE PONCTUALITÉ & ASSIDUITÉ", m + 7, SCORE_TOP + 6)
 
-    doc.setFont("helvetica", "bold"); doc.setFontSize(24); doc.setTextColor(...scRgb)
-    doc.text(`${sc}`, m + 7, 75)
-    doc.setFontSize(13); doc.setTextColor(...GREY); doc.text("/5", m + 18, 75)
-    doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...scRgb)
-    doc.text(scoreLabel(sc), m + 26, 75)
+    doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(...scRgb)
+    doc.text(`${sc}`, m + 7, SCORE_TOP + 16)
+    doc.setFontSize(11); doc.setTextColor(...GREY); doc.text("/5", m + 16, SCORE_TOP + 16)
+    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(...scRgb)
+    doc.text(scoreLabel(sc), m + 23, SCORE_TOP + 16)
 
-    // Étoiles (cercles colorés)
-    const starStartX = W - m - 52
-    for (let i = 1; i <= 5; i++) {
-      doc.setFillColor(i <= sc ? 251 : 226, i <= sc ? 191 : 232, i <= sc ? 36 : 240)
-      doc.circle(starStartX + (i - 1) * 11, 67, 3.5, "F")
-      doc.setFontSize(8); doc.setTextColor(i <= sc ? 120 : 180, i <= sc ? 80 : 180, i <= sc ? 0 : 200)
-      doc.text("★", starStartX + (i - 1) * 11 - 2.5, 68.6)
+    // Étoiles vectorielles (polygones 5 branches — évite le problème d'encodage WinAnsi du ★ Unicode)
+    function drawStar(cx: number, cy: number, outerR: number, filled: boolean) {
+      const pts: number[][] = []
+      for (let i = 0; i < 10; i++) {
+        const ang = -Math.PI / 2 + (i * Math.PI) / 5
+        const r = i % 2 === 0 ? outerR : outerR * 0.42
+        pts.push([cx + r * Math.cos(ang), cy + r * Math.sin(ang)])
+      }
+      const segs: number[][] = []
+      for (let i = 1; i < pts.length; i++) segs.push([pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]])
+      doc.setFillColor(filled ? 251 : 209, filled ? 191 : 213, filled ? 36 : 219)
+      doc.setDrawColor(filled ? 245 : 203, filled ? 158 : 213, filled ? 11 : 225)
+      doc.setLineWidth(0.15)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(doc as any).lines(segs, pts[0][0], pts[0][1], [1, 1], "FD", true)
     }
+    const starStartX = W - m - 54
+    const starY = SCORE_TOP + 11
+    for (let i = 1; i <= 5; i++) drawStar(starStartX + (i - 1) * 11, starY, 4, i <= sc)
 
     // ── KPI cards (2 × 4) ────────────────────────────────────────────────────
-    const kpiY = 84
+    const kpiY = 78
     const kpis: { label: string; val: string; col: [number,number,number] }[] = [
       { label: "JOURS ATTENDUS",     val: stats.joursAttendu.toString(),          col: BLUE   },
       { label: "JOURS PRÉSENTS",     val: stats.nbPresentsTotal.toString(),        col: LGREEN },
@@ -252,9 +264,9 @@ export default function HorairesMensuelPage() {
       { label: "HEURES TRAVAILLÉES", val: `${stats.totalHeures.toFixed(1)}h`,     col: BLUE   },
       { label: "HS VALIDÉES",        val: `${stats.totalHSValidees.toFixed(1)}h`, col: LGREEN },
     ]
-    const gap = 3.5
+    const gap = 3
     const kW  = (W - 2 * m - gap * 3) / 4
-    const kH  = 19
+    const kH  = 17
 
     kpis.forEach((k, i) => {
       const col = i % 4
@@ -264,14 +276,14 @@ export default function HorairesMensuelPage() {
       doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.3)
       doc.roundedRect(kx, ky, kW, kH, 2, 2, "FD")
       doc.setFillColor(...k.col); doc.roundedRect(kx, ky, 2.5, kH, 1, 1, "F")
-      doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...k.col)
-      doc.text(k.val, kx + kW / 2, ky + 9, { align: "center" })
-      doc.setFont("helvetica", "normal"); doc.setFontSize(5.5); doc.setTextColor(...GREY)
-      doc.text(k.label, kx + kW / 2, ky + 15.5, { align: "center" })
+      doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(...k.col)
+      doc.text(k.val, kx + kW / 2, ky + 8, { align: "center" })
+      doc.setFont("helvetica", "normal"); doc.setFontSize(5); doc.setTextColor(...GREY)
+      doc.text(k.label, kx + kW / 2, ky + 14, { align: "center" })
     })
 
     // ── Titre section tableau ─────────────────────────────────────────────────
-    const tableStartY = kpiY + 2 * (kH + gap) + 7
+    const tableStartY = kpiY + 2 * (kH + gap) + 5
     doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...NAVY)
     doc.text("Détail journalier", m, tableStartY - 3)
 
@@ -283,7 +295,7 @@ export default function HorairesMensuelPage() {
 
     autoTable(doc, {
       startY: tableStartY,
-      margin: { left: m, right: m, bottom: FOOT + 5 },
+      margin: { left: m, right: m, bottom: FOOT + 2 },
       head: [["Date", "Statut", "Arrivée", "Départ", "Heures", "Retard", "HS", "Notes"]],
       body: workDays.map(({ date, presence: p }) => {
         const statut = p ? p.statut : "ABSENT_ND"
@@ -307,18 +319,18 @@ export default function HorairesMensuelPage() {
       }),
       headStyles: {
         fillColor: NAVY, textColor: [255, 255, 255],
-        fontStyle: "bold", fontSize: 8, cellPadding: 3,
+        fontStyle: "bold", fontSize: 8.5, cellPadding: 2.5,
       },
-      bodyStyles: { fontSize: 8, textColor: SLATE, cellPadding: 2.5 },
+      bodyStyles: { fontSize: 8.5, textColor: SLATE, cellPadding: 2 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
-        0: { cellWidth: 24 },
-        1: { cellWidth: 26 },
-        2: { cellWidth: 16, halign: "center" },
-        3: { cellWidth: 16, halign: "center" },
+        0: { cellWidth: 25 },
+        1: { cellWidth: 24 },
+        2: { cellWidth: 17, halign: "center" },
+        3: { cellWidth: 17, halign: "center" },
         4: { cellWidth: 16, halign: "center" },
-        5: { cellWidth: 14, halign: "center" },
-        6: { cellWidth: 14, halign: "center" },
+        5: { cellWidth: 18, halign: "center" },
+        6: { cellWidth: 13, halign: "center" },
         7: { cellWidth: "auto" },
       },
       didParseCell: (data) => {
