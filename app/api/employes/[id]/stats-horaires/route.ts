@@ -85,12 +85,14 @@ export async function GET(
   let nbCongePresence   = 0  // statut CONGE saisi manuellement
   let nbJourOff         = 0  // statut JOUR_OFF
 
+  const seenKeys = new Set<string>()
   const cur = new Date(debut.getTime())
   while (cur.getTime() <= finEffective.getTime()) {
     const dow = cur.getUTCDay()
     if (isJourOuvre(dow)) {
       joursOuvres++
       const key = cur.toISOString().slice(0, 10)
+      seenKeys.add(key)
       const p = presenceByDate.get(key)
 
       if (congeDays.has(key)) {
@@ -109,6 +111,19 @@ export async function GET(
       }
     }
     cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+
+  // Weekends effectivement travaillés hors planning habituel
+  for (const [key, p] of presenceByDate.entries()) {
+    if (seenKeys.has(key)) continue
+    joursOuvres++; joursAttendu++
+    switch (p.statut) {
+      case "PRESENT":  nbPresent++;          break
+      case "RETARD":   nbRetard++;           break
+      case "ABSENT":   nbAbsentExplicite++;  break
+      case "CONGE":    nbCongePresence++;    break
+      case "JOUR_OFF": nbJourOff++;         break
+    }
   }
 
   const totalAbsences   = nbAbsentExplicite + nbAbsentNonSaisi

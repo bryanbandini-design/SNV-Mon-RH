@@ -290,7 +290,7 @@ export default function HorairesMensuelPage() {
     // ── Tableau via autotable ─────────────────────────────────────────────────
     const allDays = buildCalendar(mois, annee, stats.presences)
     const workDays = allDays.filter(
-      c => c && !c.isWeekend && (!c.isFuture || c.presence !== null)
+      c => c && (!c.isWeekend || c.presence !== null) && (!c.isFuture || c.presence !== null)
     ) as { date: string; presence: PresenceDetail | null; isWeekend: boolean; isFuture: boolean }[]
 
     autoTable(doc, {

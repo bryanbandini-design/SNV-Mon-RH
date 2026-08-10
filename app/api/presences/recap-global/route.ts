@@ -69,12 +69,14 @@ export async function GET(req: Request) {
     let nbPresent = 0, nbRetard = 0, nbAbsentExplicite = 0, nbAbsentNonSaisi = 0
     let nbConge = 0, nbJourOff = 0
 
+    const seenKeys = new Set<string>()
     const cur = new Date(debut.getTime())
     while (cur.getTime() <= finEffective.getTime()) {
       const dow = cur.getUTCDay()
       if (isJourOuvre(dow, emp.jourRepos)) {
         joursOuvres++
         const key = cur.toISOString().slice(0, 10)
+        seenKeys.add(key)
         const p   = presMap.get(key)
         if (congeDays.has(key)) {
           joursConge++
@@ -91,6 +93,19 @@ export async function GET(req: Request) {
         }
       }
       cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+
+    // Weekends effectivement travaillés hors planning habituel
+    for (const [key, p] of presMap.entries()) {
+      if (seenKeys.has(key)) continue
+      joursOuvres++; joursAttendu++
+      switch (p.statut) {
+        case "PRESENT":  nbPresent++;         break
+        case "RETARD":   nbRetard++;          break
+        case "ABSENT":   nbAbsentExplicite++; break
+        case "CONGE":    nbConge++;           break
+        case "JOUR_OFF": nbJourOff++;         break
+      }
     }
 
     const totalAbsences   = nbAbsentExplicite + nbAbsentNonSaisi
